@@ -1,0 +1,99 @@
+# ========================
+# Python
+# ========================
+backend/venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/htmlcov/
+backend/.coverage
+backend/coverage.xml
+*.egg-info/
+dist/
+build/
+
+# ========================
+# Environment variables
+# ========================
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+backend/.env
+frontend/.env.local
+frontend/.env.production
+
+# ========================
+# Node / Frontend
+# ========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/coverage/
+frontend/.eslintcache
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========================
+# Playwright
+# ========================
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ========================
+# Redis
+# ========================
+dump.rdb
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# OS
+# ========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# ========================
+# IDE
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.user
+.vs/
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
+*.pid
+
+# ========================
+# Uploads / temp files
+# ========================
+backend/uploads/
+backend/temp/
+*.pdf
