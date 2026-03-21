@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
+    # LLM Provider
+    LLM_PROVIDER: str = "openai"
+    OPENAI_API_KEY: str = ""
+    LLM_MODEL: str = "gpt-4o"
+
     # Rate limits and concurrency
     GITHUB_API_REQUESTS_PER_HOUR: int = 5000
     MAX_CONCURRENT_RESUMES: int = 50
