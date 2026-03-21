@@ -1,7 +1,7 @@
 import asyncio
 import base64
+import sys
 from typing import Optional
-from playwright.async_api import async_playwright, Browser, BrowserContext
 from config import settings
 from utils.logger import get_logger
 
@@ -11,16 +11,35 @@ logger = get_logger(__name__)
 class PlaywrightPool:
     def __init__(self):
         self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._semaphore = asyncio.Semaphore(settings.PLAYWRIGHT_POOL_SIZE)
-        self._lock = asyncio.Lock()
+        self._browser = None
+        self._semaphore = None
+        self._lock = None
         self._initialized = False
 
+    def _ensure_sync_primitives(self):
+        """Create asyncio primitives lazily inside the running event loop."""
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(settings.PLAYWRIGHT_POOL_SIZE)
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+
     async def initialize(self):
+        self._ensure_sync_primitives()
         async with self._lock:
             if self._initialized:
                 return
             logger.info("Initializing Playwright browser pool...")
+
+            # On Windows, ensure ProactorEventLoop is active
+            if sys.platform == "win32":
+                loop = asyncio.get_event_loop()
+                if not isinstance(loop, asyncio.ProactorEventLoop):
+                    logger.warning(
+                        "Not running on ProactorEventLoop — Playwright may fail on Windows"
+                    )
+
+            from playwright.async_api import async_playwright
+
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
                 headless=True,
@@ -45,7 +64,8 @@ class PlaywrightPool:
         self._initialized = False
         logger.info("Playwright browser pool shut down")
 
-    async def new_context(self) -> BrowserContext:
+    async def _get_context(self):
+        """Get a browser context, initializing lazily if needed."""
         if not self._initialized:
             await self.initialize()
         return await self._browser.new_context(
@@ -60,6 +80,7 @@ class PlaywrightPool:
         )
 
     async def check_url(self, url: str) -> dict:
+        self._ensure_sync_primitives()
         async with self._semaphore:
             return await self._check_url_internal(url)
 
@@ -75,36 +96,29 @@ class PlaywrightPool:
             "is_trivial": True,
             "error": None,
         }
-
-        context = None
-        page = None
-
+        context = page = None
         try:
-            context = await self.new_context()
+            context = await self._get_context()
             page = await context.new_page()
-
             page.set_default_navigation_timeout(settings.PLAYWRIGHT_NAVIGATION_TIMEOUT)
             page.set_default_timeout(settings.PLAYWRIGHT_PAGE_TIMEOUT)
 
-            skip_resources = ["image", "media", "font"]
             await page.route(
                 "**/*",
                 lambda route: (
                     route.abort()
-                    if route.request.resource_type in skip_resources
+                    if route.request.resource_type in ["image", "media", "font"]
                     else route.continue_()
                 ),
             )
 
             response = await page.goto(url, wait_until="domcontentloaded")
-
             if response is None:
                 result["error"] = "No response received"
                 return result
 
             result["http_status"] = response.status
             result["is_live"] = response.status < 400
-
             if not result["is_live"]:
                 return result
 
@@ -114,33 +128,18 @@ class PlaywrightPool:
                 pass
 
             result["page_title"] = await page.title()
-
             visible_text = await page.evaluate(
-                """
-                () => {
-                    const body = document.body;
-                    if (!body) return '';
-                    const text = body.innerText || '';
-                    return text.slice(0, 2000);
-                }
-            """
+                "() => { const b = document.body; if (!b) return ''; return (b.innerText || '').slice(0, 2000); }"
             )
             result["visible_text"] = visible_text
 
             interactive_count = await page.evaluate(
-                """
-                () => {
-                    const buttons = document.querySelectorAll('button, a, input, select, textarea, [onclick]');
-                    return buttons.length;
-                }
-            """
+                "() => document.querySelectorAll('button, a, input, select, textarea, [onclick]').length"
             )
             result["has_interactive_elements"] = interactive_count > 3
 
             screenshot_bytes = await page.screenshot(
-                full_page=False,
-                type="jpeg",
-                quality=60,
+                full_page=False, type="jpeg", quality=60
             )
             result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode(
                 "utf-8"
@@ -158,13 +157,9 @@ class PlaywrightPool:
             ]
             text_lower = (visible_text or "").lower()
             title_lower = (result["page_title"] or "").lower()
-
             result["is_trivial"] = (
                 not result["has_interactive_elements"] and len(visible_text or "") < 200
-            ) or any(
-                indicator in text_lower or indicator in title_lower
-                for indicator in trivial_indicators
-            )
+            ) or any(i in text_lower or i in title_lower for i in trivial_indicators)
 
         except asyncio.TimeoutError:
             result["error"] = "Timeout"
@@ -174,9 +169,15 @@ class PlaywrightPool:
             logger.warning(f"Playwright error for {url}: {e}")
         finally:
             if page:
-                await page.close()
+                try:
+                    await page.close()
+                except Exception:
+                    pass
             if context:
-                await context.close()
+                try:
+                    await context.close()
+                except Exception:
+                    pass
 
         return result
 
@@ -189,8 +190,7 @@ async def check_url(url: str) -> dict:
 
 
 async def check_urls_batch(urls: list[str]) -> list[dict]:
-    tasks = [check_url(url) for url in urls]
-    return await asyncio.gather(*tasks)
+    return await asyncio.gather(*[check_url(url) for url in urls])
 
 
 def should_skip_url(url: str) -> bool:
@@ -207,8 +207,7 @@ def should_skip_url(url: str) -> bool:
         "docs.",
         "documentation.",
     ]
-    url_lower = url.lower()
-    return any(domain in url_lower for domain in skip_domains)
+    return any(d in url.lower() for d in skip_domains)
 
 
 def is_deployment_url(url: str) -> bool:
@@ -225,8 +224,7 @@ def is_deployment_url(url: str) -> bool:
         "up.railway.app",
     ]
     url_lower = url.lower()
-    skip_domains = ["github.com", "linkedin.com", "twitter.com"]
-    if any(d in url_lower for d in skip_domains):
+    if any(d in url_lower for d in ["github.com", "linkedin.com", "twitter.com"]):
         return False
     if any(d in url_lower for d in deployment_indicators):
         return True

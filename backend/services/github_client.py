@@ -81,11 +81,11 @@ async def get_file_content(
     username: str, repo_name: str, file_path: str
 ) -> Optional[str]:
     async with httpx.AsyncClient() as client:
-        data = await get(
-            client,
-            f"{GITHUB_API_BASE}/repos/{username}/{repo_name}/contents/{file_path}",
-        )
+        url = f"{GITHUB_API_BASE}/repos/{username}/{repo_name}/contents/{file_path}"
+        logger.debug(f"Fetching file: {url}")
+        data = await get(client, url)
         if not data or not isinstance(data, dict):
+            logger.warning(f"No data returned for file: {file_path}")
             return None
         if data.get("size", 0) > settings.MAX_FILE_SIZE_TO_READ_BYTES:
             logger.info(f"Skipping large file {file_path} ({data.get('size')} bytes)")
@@ -128,7 +128,6 @@ def score_repos(repos: list[dict], required_skills: list[str]) -> list[dict]:
         "flask": ["Python"],
         "spring": ["Java"],
     }
-
     relevant_languages = set()
     for skill in required_skills:
         langs = skill_to_language.get(skill.lower(), [])
@@ -140,10 +139,8 @@ def score_repos(repos: list[dict], required_skills: list[str]) -> list[dict]:
             continue
         if repo.get("size", 0) < 10:
             continue
-
         score = 0
         lang = repo.get("language") or ""
-
         if lang in relevant_languages:
             score += 3
         if repo.get("stargazers_count", 0) > 0:
@@ -154,7 +151,6 @@ def score_repos(repos: list[dict], required_skills: list[str]) -> list[dict]:
             score += 1
         if not repo.get("archived"):
             score += 1
-
         scored.append({**repo, "_score": score})
 
     scored.sort(key=lambda x: (x["_score"], x.get("pushed_at", "")), reverse=True)
@@ -166,16 +162,11 @@ async def fetch_full_repo_data(
 ) -> dict:
     repo_name = repo["name"]
 
-    commits_task = get_commits(username, repo_name)
-    languages_task = get_repo_languages(username, repo_name)
-    readme_task = get_readme(username, repo_name)
-    contents_task = get_repo_contents(username, repo_name)
-
     commits, languages, readme, contents = await asyncio.gather(
-        commits_task,
-        languages_task,
-        readme_task,
-        contents_task,
+        get_commits(username, repo_name),
+        get_repo_languages(username, repo_name),
+        get_readme(username, repo_name),
+        get_repo_contents(username, repo_name),
     )
 
     commit_messages = []
@@ -185,6 +176,9 @@ async def fetch_full_repo_data(
             commit_messages.append(msg.split("\n")[0][:100])
 
     source_files = {}
+    has_tests = False
+    has_ci = False
+
     if contents:
         interesting_extensions = {
             ".py",
@@ -211,20 +205,85 @@ async def fetch_full_repo_data(
             for f in contents
         )
 
-        code_files = [
-            f
-            for f in contents
-            if any(f.get("name", "").endswith(ext) for ext in interesting_extensions)
-            and f.get("size", 0) < settings.MAX_FILE_SIZE_TO_READ_BYTES
-        ]
+        def is_useful_code_file(f: dict) -> bool:
+            """Skip empty files, __init__.py with no real content, and oversized files."""
+            name = f.get("name", "")
+            size = f.get("size", 0)
+            if size == 0:
+                return False
+            if size > settings.MAX_FILE_SIZE_TO_READ_BYTES:
+                return False
+            if not any(name.endswith(ext) for ext in interesting_extensions):
+                return False
+            # Skip tiny __init__.py — they're almost always just comments or empty
+            if name == "__init__.py" and size < 100:
+                return False
+            return True
 
-        for f in code_files[: settings.MAX_FILES_TO_READ_PER_REPO]:
-            content = await get_file_content(username, repo_name, f["name"])
-            if content:
-                source_files[f["name"]] = content[:2000]
-    else:
-        has_tests = False
-        has_ci = False
+        def collect_code_files(items: list[dict]) -> list[dict]:
+            return [f for f in items if is_useful_code_file(f)]
+
+        code_files = collect_code_files(contents)
+
+        # If no real code files at root, search subdirs up to 2 levels deep
+        # Keep collecting across multiple subdirs until we hit MAX_FILES limit
+        if not code_files:
+            common_src_dirs = ["src", "app", "backend", "api", "lib", "core"]
+            for item in contents:
+                if item.get("type") != "dir":
+                    continue
+                dir_name = item.get("name", "").lower()
+                if dir_name not in common_src_dirs:
+                    continue
+
+                sub_contents = await get_repo_contents(
+                    username, repo_name, item["name"]
+                )
+                if not sub_contents:
+                    continue
+
+                sub_code_files = collect_code_files(sub_contents)
+
+                # If nothing useful at this level, drill into its subdirs
+                if not sub_code_files:
+                    logger.debug(
+                        f"No useful files in {item['name']}/, drilling into subdirs..."
+                    )
+                    # Fetch all subdirs in parallel
+                    subdir_items = [s for s in sub_contents if s.get("type") == "dir"]
+                    subdir_contents_list = await asyncio.gather(
+                        *[
+                            get_repo_contents(username, repo_name, s["path"])
+                            for s in subdir_items
+                        ]
+                    )
+                    for deep_contents in subdir_contents_list:
+                        if deep_contents:
+                            deep_code_files = collect_code_files(deep_contents)
+                            sub_code_files.extend(deep_code_files[:3])
+                        if len(sub_code_files) >= settings.MAX_FILES_TO_READ_PER_REPO:
+                            break
+
+                code_files.extend(sub_code_files)
+                # Don't break — keep going through common_src_dirs to gather more files
+                if len(code_files) >= settings.MAX_FILES_TO_READ_PER_REPO:
+                    break
+
+        # Read up to MAX_FILES_TO_READ_PER_REPO, prioritize larger/more meaningful files
+        code_files_sorted = sorted(
+            code_files, key=lambda f: f.get("size", 0), reverse=True
+        )
+        for f in code_files_sorted[: settings.MAX_FILES_TO_READ_PER_REPO]:
+            file_path = f.get("path") or f.get("name")
+            if file_path:
+                logger.debug(f"Reading: {file_path}")
+                content = await get_file_content(username, repo_name, file_path)
+                if content and len(content.strip()) > 50:
+                    source_files[f["name"]] = content[:3000]  # increased from 2000
+                else:
+                    logger.warning(
+                        f"Skipped {file_path} — empty or no content returned"
+                    )
 
     return {
         "name": repo_name,
