@@ -18,6 +18,7 @@ backend/coverage.xml
 dist/
 build/
 
+
 # ========================
 # Environment variables
 # ========================
