@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import ProgressBar from "./ui/ProgressBar";
 import { glass } from "@/lib/styles";
+
+const ResumesToDiamonds = dynamic(() => import("./ResumesToDiamonds"), {
+  ssr: false,
+  loading: () => <div style={{ height: 340 }} />,
+});
 
 interface ProcessingScreenProps {
   onComplete: () => void;
@@ -51,12 +57,16 @@ export default function ProcessingScreen({ onComplete }: ProcessingScreenProps) 
         <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)" }}>Shortlyst</span>
       </header>
       <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-        <div style={{ width: "100%", maxWidth: 600 }}>
-          <div style={{ textAlign: "center", marginBottom: 48 }}>
+        <div style={{ width: "100%", maxWidth: 760 }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
             <h2 style={{ fontFamily: "var(--serif)", fontSize: 32, fontWeight: 400, marginBottom: 8 }}>Analyzing candidates</h2>
             <p style={{ fontSize: 14, color: "var(--gray-500)", fontWeight: 300 }}>Verifying claims against real-world evidence</p>
           </div>
-          <div style={{ display: "flex", gap: 24, marginBottom: 32, justifyContent: "center" }}>
+
+          {/* 3D animation */}
+          <ResumesToDiamonds height={340} />
+
+          <div style={{ display: "flex", gap: 24, marginTop: 28, marginBottom: 28, justifyContent: "center" }}>
             {[1, 2, 3].map(p => (
               <div key={p} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{
