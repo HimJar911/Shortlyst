@@ -66,6 +66,20 @@ function drawIsoBox(
     [wx, wy + bh, wz + bd], // 7: back-top-left
   ].map(([x, y, z]) => isoProject(x, y, z, originX, originY));
 
+  // Front face (facing the viewer — connects bottom-left, bottom-right, top-right, top-left at wz)
+  ctx.beginPath();
+  ctx.moveTo(corners[0][0], corners[0][1]);
+  ctx.lineTo(corners[1][0], corners[1][1]);
+  ctx.lineTo(corners[5][0], corners[5][1]);
+  ctx.lineTo(corners[4][0], corners[4][1]);
+  ctx.closePath();
+  // Slightly darker than the right face to differentiate
+  ctx.fillStyle = rightColor;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.08)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
   // Top face
   ctx.beginPath();
   ctx.moveTo(corners[4][0], corners[4][1]);
@@ -115,9 +129,9 @@ function drawBelt(
   originX: number, originY: number,
   t: number
 ) {
-  const beltLen = 340;
-  const beltW = 60;
-  const beltH = 6;
+  const beltLen = 440;
+  const beltW = 72;
+  const beltH = 8;
   const startX = -beltLen / 2;
 
   // Belt base
@@ -171,10 +185,10 @@ function drawMachine(
   originX: number, originY: number,
   t: number
 ) {
-  const mx = -20; // world x center of machine
-  const mw = 60;
-  const mh = 70;
-  const md = 56;
+  const mx = -25; // world x center of machine
+  const mw = 72;
+  const mh = 85;
+  const md = 66;
   const pulse = 0.5 + 0.5 * Math.sin(t * 4);
 
   // Machine body
@@ -257,9 +271,9 @@ function drawMachine(
   }
 }
 
-// ─── Draw paper box with stacked papers ───────────────────────────────────────
+// ─── Draw paper stack (no box, just stacked papers) ──────────────────────────
 
-function drawPaperBox(
+function drawPaperStack(
   ctx: CanvasRenderingContext2D,
   wx: number,
   originX: number, originY: number,
@@ -267,27 +281,56 @@ function drawPaperBox(
 ) {
   if (alpha <= 0) return;
 
-  const bw = 30;
-  const bh = 26;
-  const bd = 24;
+  const pw = 48;  // paper width
+  const pd = 36;  // paper depth
+  const numSheets = 41;
+  const sheetH = 1.12;   // thickness of each sheet
+  const baseY = 3;       // sit on belt surface
 
-  // Box body
-  drawIsoBox(ctx, wx - bw / 2, 2, -bd / 2, bw, bh, bd,
-    "#e8e2d4", "#d4cec0", "#dcd6c8", originX, originY, alpha);
-
-  // Stacked papers inside (visible on top)
   ctx.save();
   ctx.globalAlpha = alpha;
-  for (let i = 0; i < 4; i++) {
-    const py = bh + 2 + i * 3;
-    const pw = bw - 8;
-    const pd = bd - 6;
-    const offsetX = (i % 2 === 0 ? 1 : -1) * 1.5;
-    const offsetZ = (i % 2 === 0 ? -1 : 1) * 1;
 
-    drawIsoBox(ctx, wx - pw / 2 + offsetX, py, -pd / 2 + offsetZ, pw, 2, pd,
-      "#f8f6f0", "#eeebe4", "#f2efe8", originX, originY, alpha);
+  // Shadow underneath the stack on the belt
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.12;
+  const s0 = isoProject(wx - pw / 2 - 1, 2.5, -pd / 2 - 1, originX, originY);
+  const s1 = isoProject(wx + pw / 2 + 1, 2.5, -pd / 2 - 1, originX, originY);
+  const s2 = isoProject(wx + pw / 2 + 1, 2.5, pd / 2 + 1, originX, originY);
+  const s3 = isoProject(wx - pw / 2 - 1, 2.5, pd / 2 + 1, originX, originY);
+  ctx.beginPath();
+  ctx.moveTo(s0[0], s0[1]);
+  ctx.lineTo(s1[0], s1[1]);
+  ctx.lineTo(s2[0], s2[1]);
+  ctx.lineTo(s3[0], s3[1]);
+  ctx.closePath();
+  ctx.fillStyle = "#000";
+  ctx.fill();
+  ctx.restore();
+
+  for (let i = 0; i < numSheets; i++) {
+    const py = baseY + i * sheetH;
+    // Slight natural offsets — small and stable
+    const offsetX = (i % 2 === 0 ? 0.8 : -0.8) + (i % 3 === 0 ? 0.4 : -0.3);
+    const offsetZ = (i % 2 === 0 ? -0.6 : 0.6) + (i % 3 === 1 ? 0.3 : -0.2);
+
+    // Alternate very slightly between warm-white and cool-white
+    const isWarm = i % 2 === 0;
+    const topC = isWarm ? "#f8f6f0" : "#f5f3ed";
+    const leftC = isWarm ? "#eae7e0" : "#e6e3dc";
+    const rightC = isWarm ? "#f0ede6" : "#ece9e2";
+
+    drawIsoBox(
+      ctx,
+      wx - pw / 2 + offsetX,
+      py,
+      -pd / 2 + offsetZ,
+      pw, sheetH, pd,
+      topC, leftC, rightC,
+      originX, originY,
+      alpha
+    );
   }
+
   ctx.restore();
 }
 
@@ -305,14 +348,14 @@ function drawDiamond(
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  const bounce = Math.sin(t * 5 + index * 2.5) * 4;
-  const wy = 18 + bounce;
+  const bounce = Math.sin(t * 5 + index * 2.5) * 5;
+  const wy = 22 + bounce;
   const sparkle = 0.5 + 0.5 * Math.sin(t * 7 + index * 2.3);
   const rot = t * 1.2 + index * 1.8;
 
   // Diamond center in screen space
   const [cx, cy] = isoProject(wx, wy, 0, originX, originY);
-  const size = 14;
+  const size = 17;
 
   // Glow
   ctx.shadowColor = `rgba(147,197,253,${0.5 + sparkle * 0.4})`;
@@ -392,32 +435,32 @@ function drawFrame(
   // Origin point — where world (0,0,0) maps to on screen
   // Slightly left-of-center and below middle so belt runs bottom-left to upper-right
   const originX = W * 0.5;
-  const originY = H * 0.65;
+  const originY = H * 0.68;
 
-  const beltHalf = 170; // half the belt length in world units
-  const machineX = -20; // machine sits slightly left of center in world
+  const beltHalf = 220; // half the belt length in world units
+  const machineX = -25; // machine sits slightly left of center in world
 
   // Draw back-to-front for proper layering:
 
   // 1. Belt (base layer)
   drawBelt(ctx, originX, originY, t);
 
-  // 2. Paper boxes approaching machine (coming from the left in world space)
+  // 2. Paper stacks approaching machine (coming from the left in world space)
   for (let i = 0; i < NUM_ITEMS; i++) {
     const localT = ((t / CYCLE + i / NUM_ITEMS) % 1);
     if (localT < 0.5) {
       const progress = localT / 0.5;
       const eased = easeInOut(progress);
-      const startX = -beltHalf + 20;
-      const endX = machineX - 35;
+      const startX = -beltHalf + 30;
+      const endX = machineX - 42;
       const x = startX + eased * (endX - startX);
       let opacity = 1;
       if (progress > 0.85) opacity = 1 - smoothstep((progress - 0.85) / 0.15);
-      drawPaperBox(ctx, x, originX, originY, opacity);
+      drawPaperStack(ctx, x, originX, originY, opacity);
     }
   }
 
-  // 3. Machine (occludes boxes entering)
+  // 3. Machine (occludes stacks entering)
   drawMachine(ctx, originX, originY, t);
 
   // 4. Diamonds exiting machine (going to the right in world space)
@@ -426,8 +469,8 @@ function drawFrame(
     if (localT >= 0.5) {
       const progress = (localT - 0.5) / 0.5;
       const eased = easeOut3(progress);
-      const startX = machineX + 45;
-      const endX = beltHalf - 20;
+      const startX = machineX + 55;
+      const endX = beltHalf - 30;
       const x = startX + eased * (endX - startX);
       let opacity = 1;
       if (progress < 0.1) opacity = smoothstep(progress / 0.1);
@@ -439,7 +482,7 @@ function drawFrame(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ResumesToDiamonds({ height = 300 }: { height?: number }) {
+export default function ResumesToDiamonds({ height = 420 }: { height?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 
