@@ -3,9 +3,108 @@
 import { useState } from "react";
 import { glass } from "@/lib/styles";
 
-interface UploadScreenProps {
-  onStart: () => void;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface FilterSettings {
+  requireGithub: boolean;
+  requireLinkedin: boolean;
+  strictMatch: boolean;
 }
+
+interface UploadScreenProps {
+  onStart: (filters: FilterSettings) => void;
+}
+
+// ─── Strict-match placeholder skills (parsed from demo JD) ────────────────────
+
+const REQUIRED_SKILLS = ["React", "Node.js", "TypeScript", "AWS", "PostgreSQL"];
+
+// ─── Toggle component ─────────────────────────────────────────────────────────
+
+interface ToggleProps {
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}
+
+function Toggle({ label, description, value, onChange }: ToggleProps) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 200,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+        padding: "14px 18px",
+        borderRadius: 10,
+        cursor: "pointer",
+        userSelect: "none",
+        ...glass.surface,
+        transition: "box-shadow 0.2s, border 0.2s",
+      }}
+      onClick={() => onChange(!value)}
+    >
+      {/* Text */}
+      <div>
+        <div
+          style={{
+            fontSize: 13,
+            fontFamily: "var(--sans)",
+            fontWeight: 500,
+            color: "var(--black)",
+            marginBottom: 3,
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            fontFamily: "var(--sans)",
+            fontWeight: 300,
+            color: "var(--gray-400)",
+            lineHeight: 1.4,
+          }}
+        >
+          {description}
+        </div>
+      </div>
+
+      {/* Slider track */}
+      <div
+        style={{
+          flexShrink: 0,
+          width: 44,
+          height: 24,
+          borderRadius: 12,
+          background: value ? "#1a1a1a" : "rgba(0,0,0,0.1)",
+          position: "relative",
+          transition: "background 0.2s ease",
+        }}
+      >
+        {/* Knob */}
+        <div
+          style={{
+            position: "absolute",
+            top: 2,
+            left: value ? 22 : 2,
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            background: "#ffffff",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06)",
+            transition: "left 0.2s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function UploadScreen({ onStart }: UploadScreenProps) {
   const [jdFile, setJdFile] = useState<File | null>(null);
@@ -15,6 +114,11 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
   const [dragOverResumes, setDragOverResumes] = useState(false);
   const [inputMode, setInputMode] = useState<"upload" | "paste">("paste");
   const [demoLoaded, setDemoLoaded] = useState(false);
+
+  // Filter states
+  const [requireGithub, setRequireGithub] = useState(false);
+  const [requireLinkedin, setRequireLinkedin] = useState(false);
+  const [strictMatch, setStrictMatch] = useState(false);
 
   const loadDemo = () => {
     setInputMode("paste");
@@ -41,8 +145,26 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
     boxShadow: active ? "0 8px 32px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.3)" : glass.surface.boxShadow,
   });
 
+  const handleStart = () => {
+    if (!canStart) return;
+    onStart({ requireGithub, requireLinkedin, strictMatch });
+  };
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "var(--sans)" }}>
+
+      {/* Responsive media query for toggle row */}
+      <style>{`
+        .filter-toggles-row { display: flex; flex-direction: row; }
+        @media (max-width: 768px) {
+          .filter-toggles-row { flex-direction: column; }
+        }
+        .strict-match-panel {
+          overflow: hidden;
+          transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+      `}</style>
+
       <header style={{ padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", ...glass.header, position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
           <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)", letterSpacing: "-0.02em" }}>Shortlyst</span>
@@ -60,6 +182,8 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
 
       <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
         <div style={{ width: "100%", maxWidth: 820 }}>
+
+          {/* Hero */}
           <div style={{ marginBottom: 56, textAlign: "center" }}>
             <h1 style={{ fontFamily: "var(--serif)", fontSize: "clamp(32px, 5vw, 48px)", fontWeight: 400, color: "var(--black)", lineHeight: 1.15, marginBottom: 16 }}>
               Verify talent.<br />Rank by evidence.
@@ -69,6 +193,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             </p>
           </div>
 
+          {/* Upload cards */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             {/* JD Column */}
             <div>
@@ -159,8 +284,89 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             </div>
           </div>
 
-          <div style={{ marginTop: 40, textAlign: "center" }}>
-            <button onClick={() => canStart && onStart()} style={{
+          {/* ── Filter toggles ─────────────────────────────────────────────────── */}
+          <div style={{ marginTop: 32, marginBottom: 32 }}>
+
+            {/* Toggle row */}
+            <div className="filter-toggles-row" style={{ gap: 12 }}>
+              <Toggle
+                label="Require GitHub"
+                description="Reject candidates with no GitHub link"
+                value={requireGithub}
+                onChange={setRequireGithub}
+              />
+              <Toggle
+                label="Require LinkedIn"
+                description="Reject candidates with no LinkedIn URL"
+                value={requireLinkedin}
+                onChange={setRequireLinkedin}
+              />
+              <Toggle
+                label="Strict Match"
+                description="Must meet every hard requirement"
+                value={strictMatch}
+                onChange={setStrictMatch}
+              />
+            </div>
+
+            {/* Strict Match expansion panel */}
+            <div
+              className="strict-match-panel"
+              style={{
+                maxHeight: strictMatch ? 120 : 0,
+                opacity: strictMatch ? 1 : 0,
+              }}
+            >
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "16px 20px",
+                  borderRadius: 10,
+                  ...glass.surface,
+                  border: "1px solid rgba(255,255,255,0.5)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "var(--mono)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "var(--gray-400)",
+                    marginBottom: 12,
+                  }}
+                >
+                  Required Skills
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {REQUIRED_SKILLS.map((skill) => (
+                    <span
+                      key={skill}
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: 6,
+                        fontFamily: "var(--mono)",
+                        fontSize: 11,
+                        fontWeight: 400,
+                        color: "var(--gray-700)",
+                        background: "rgba(255,255,255,0.6)",
+                        border: "1px solid rgba(0,0,0,0.08)",
+                        backdropFilter: "blur(8px)",
+                        WebkitBackdropFilter: "blur(8px)",
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Analyze button */}
+          <div style={{ textAlign: "center" }}>
+            <button onClick={handleStart} style={{
               padding: "14px 48px", fontFamily: "var(--sans)", fontSize: 15, fontWeight: 500,
               background: canStart ? "linear-gradient(135deg, var(--gray-800), var(--black))" : "rgba(0,0,0,0.06)",
               color: canStart ? "#fff" : "var(--gray-400)",
@@ -172,6 +378,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
               {canStart ? "Ready — 12 resumes will be processed" : "Upload both inputs to continue"}
             </p>
           </div>
+
         </div>
       </main>
     </div>
