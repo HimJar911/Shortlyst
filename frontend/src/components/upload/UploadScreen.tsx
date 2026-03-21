@@ -203,7 +203,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             {/* JD Column */}
             <div>
               {/* Label left, toggle right — same flex row, marginBottom matches Resumes label height */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, height: 24 }}>
                 <label style={{ fontSize: 12, fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-700)", fontWeight: 600 }}>Job Description</label>
                 <div style={{ display: "flex", gap: 0, borderRadius: 6, overflow: "hidden", ...glass.pill }}>
                   {(["upload", "paste"] as const).map(m => (
