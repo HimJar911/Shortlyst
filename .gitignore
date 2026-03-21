@@ -98,3 +98,7 @@ logs/
 backend/uploads/
 backend/temp/
 *.pdf
+
+backend/test_*.py
+backend/debug_*.py
+backend/run.py
