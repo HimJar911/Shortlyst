@@ -10,7 +10,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def run_full_pipeline(job_id: str, file_paths: list[str], jd_text: str) -> dict:
+async def run_full_pipeline(job_id: str, file_paths: list[str], jd_text: str, *, require_github: bool = False) -> dict:
     """
     Master coordinator. Runs Phase 1 → Phase 2 → Phase 3.
     Handles errors and cleans up temp files.
@@ -20,7 +20,7 @@ async def run_full_pipeline(job_id: str, file_paths: list[str], jd_text: str) ->
     try:
         # Phase 1 — filter
         passed, eliminated, jd_requirements = await run_phase1_pipeline(
-            job_id, file_paths, jd_text
+            job_id, file_paths, jd_text, require_github=require_github
         )
 
         if not passed:

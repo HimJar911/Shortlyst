@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { glass } from "@/lib/styles";
 import { submitAnalysis } from "@/lib/api";
 import type { FilterSettings } from "@/lib/api";
 import { useJobStore } from "@/store/jobStore";
+import { SkillLogos } from "@/components/ui/SkillLogos";
 
 // Re-export so callers that imported FilterSettings from here keep working.
 export type { FilterSettings };
@@ -13,9 +14,29 @@ interface UploadScreenProps {
   onStart: () => void;
 }
 
-// ─── Strict-match placeholder skills ─────────────────────────────────────────
+// ─── Skill keyword extraction from JD text ──────────────────────────────────
+// Build a canonical list from SkillLogos keys, deduplicating aliases.
 
-const REQUIRED_SKILLS = ["React", "Node.js", "TypeScript", "AWS", "PostgreSQL"];
+const SKILL_CANONICAL: { name: string; pattern: RegExp }[] = (() => {
+  // Keep only canonical names (skip alias-only entries like CSharp, CPP, etc.)
+  const canonical = new Set<string>();
+  const skip = new Set([
+    "CSharp", "csharp", "CPP", "cpp", "NextJS", "Next", "VueJS",
+    "AngularJS", "Mongo", "Node", "Postgres", "DotNet", "TailwindCSS",
+    "k8s", "HTML5", "CSS3",
+  ]);
+
+  for (const key of Object.keys(SkillLogos)) {
+    if (!skip.has(key)) canonical.add(key);
+  }
+
+  return Array.from(canonical).map((name) => {
+    // Escape regex special chars then wrap with word-boundary logic.
+    // For very short names (C, R, Go) require surrounding boundaries.
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return { name, pattern: new RegExp(`(?:^|[\\s,;(/])${escaped}(?=[\\s,;)/.,!?:]|$)`, "i") };
+  });
+})();
 
 // ─── Toggle component ─────────────────────────────────────────────────────────
 
@@ -84,8 +105,16 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
 
   // Filter states
   const [requireGithub, setRequireGithub] = useState(false);
-  const [requireLinkedin, setRequireLinkedin] = useState(false);
   const [strictMatch, setStrictMatch] = useState(false);
+
+  // Extract skills from JD text by matching against known skill names
+  const extractedSkills = useMemo(() => {
+    const text = jdText.trim();
+    if (!text) return [];
+    return SKILL_CANONICAL
+      .filter(({ pattern }) => pattern.test(text))
+      .map(({ name }) => name);
+  }, [jdText]);
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,7 +198,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
     setIsSubmitting(true);
     try {
       const jd = inputMode === "paste" ? jdText.trim() : jdFile!;
-      const jobId = await submitAnalysis(jd, resumeFiles, { requireGithub, requireLinkedin, strictMatch });
+      const jobId = await submitAnalysis(jd, resumeFiles, { requireGithub, strictMatch });
       store.reset();
       store.setJobId(jobId);
       store.setStatus("queued");
@@ -312,9 +341,8 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
 
           {/* ── Filter toggles ─────────────────────────────────────────────── */}
           <div style={{ marginTop: 32, marginBottom: 32 }}>
-            <div className="filter-toggles-row" style={{ gap: 12 }}>
+            <div className="filter-toggles-row" style={{ gap: 16 }}>
               <Toggle label="Require GitHub"   description="Reject candidates with no GitHub link"  value={requireGithub}   onChange={setRequireGithub} />
-              <Toggle label="Require LinkedIn" description="Reject candidates with no LinkedIn URL"  value={requireLinkedin} onChange={setRequireLinkedin} />
               <Toggle label="Strict Match"     description="Must meet every hard requirement"        value={strictMatch}     onChange={setStrictMatch} />
             </div>
 
@@ -325,16 +353,22 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
                   Required Skills
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {REQUIRED_SKILLS.map(skill => (
-                    <span key={skill} style={{
-                      padding: "4px 12px", borderRadius: 6, fontFamily: "var(--mono)", fontSize: 11,
-                      color: "var(--gray-700)", background: "rgba(255,255,255,0.6)",
-                      border: "1px solid rgba(0,0,0,0.08)",
-                      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-                    }}>
-                      {skill}
+                  {extractedSkills.length > 0 ? (
+                    extractedSkills.map(skill => (
+                      <span key={skill} style={{
+                        padding: "4px 12px", borderRadius: 6, fontFamily: "var(--mono)", fontSize: 11,
+                        color: "var(--gray-700)", background: "rgba(255,255,255,0.6)",
+                        border: "1px solid rgba(0,0,0,0.08)",
+                        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                      }}>
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, fontFamily: "var(--sans)", color: "var(--gray-400)", fontStyle: "italic" }}>
+                      Paste a job description to see requirements
                     </span>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>

@@ -16,6 +16,8 @@ async def run_phase1_pipeline(
     job_id: str,
     file_paths: list[str],
     jd_text: str,
+    *,
+    require_github: bool = False,
 ) -> tuple[list[dict], list[dict], dict]:
     await set_job_status(job_id, "phase1")
     await push_sse_event(
@@ -23,6 +25,9 @@ async def run_phase1_pipeline(
     )
 
     jd_requirements = await extract_jd_requirements(jd_text)
+    # If the user toggled "Require GitHub" in the UI, override the LLM flag
+    if require_github:
+        jd_requirements["requires_github"] = True
     await push_sse_event(
         job_id,
         "jd_parsed",

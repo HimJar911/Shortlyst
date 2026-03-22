@@ -14,11 +14,11 @@ async def create_analysis_job(total_resumes: int, jd_text: str) -> str:
     return job_id
 
 
-async def run_pipeline_background(job_id: str, file_paths: list[str], jd_text: str):
+async def run_pipeline_background(job_id: str, file_paths: list[str], jd_text: str, require_github: bool = False):
     """Run the full pipeline as a background asyncio task."""
     from pipeline.orchestrator import run_full_pipeline
 
     try:
-        await run_full_pipeline(job_id, file_paths, jd_text)
+        await run_full_pipeline(job_id, file_paths, jd_text, require_github=require_github)
     except Exception as e:
         logger.error(f"Background pipeline task failed for {job_id}: {e}")

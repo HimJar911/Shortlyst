@@ -205,7 +205,7 @@ async def check_hard_requirements(
     if requires_github and not mechanical.get("github_url"):
         failures.append({
             "check": "github",
-            "reason": "JD requires GitHub profile, none found on resume",
+            "reason": "No GitHub profile linked",
         })
 
     return failures

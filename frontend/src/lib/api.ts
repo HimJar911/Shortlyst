@@ -225,7 +225,6 @@ export interface SSECallbacks {
 
 export interface FilterSettings {
   requireGithub: boolean;
-  requireLinkedin: boolean;
   strictMatch: boolean;
 }
 
@@ -272,24 +271,21 @@ async function throwIfError(res: Response): Promise<void> {
  *
  * @param resumes   Array of PDF File objects for the candidate resumes.
  *
- * @param filters   UI filter toggles. NOTE: The current backend derives all
- *                  filtering criteria from the JD text itself via LLM — it
- *                  does not accept filter flags in the request. These settings
- *                  are included in the signature for forward-compatibility but
- *                  are NOT sent to the backend today.
+ * @param filters   UI filter toggles sent alongside the analysis request.
  *
  * @returns         The job_id string to use for streaming and result fetching.
  */
 export async function submitAnalysis(
   jd: string | File,
   resumes: File[],
-  filters: FilterSettings,  // eslint-disable-line @typescript-eslint/no-unused-vars
+  filters: FilterSettings,
 ): Promise<string> {
   // Resolve JD to a string the backend can accept
   const jdText = typeof jd === "string" ? jd : await jd.text();
 
   const form = new FormData();
   form.append("jd_text", jdText);
+  form.append("require_github", filters.requireGithub ? "true" : "false");
   for (const file of resumes) {
     form.append("resumes", file);
   }

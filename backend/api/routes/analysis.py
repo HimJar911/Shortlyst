@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 async def analyze(
     resumes: List[UploadFile] = File(...),
     jd_text: str = Form(...),
+    require_github: str = Form("false"),
 ):
     # Validate
     if not resumes:
@@ -59,7 +60,8 @@ async def analyze(
             file_paths.append(file_path)
 
         # Launch pipeline as background task — return job_id immediately
-        asyncio.create_task(run_pipeline_background(job_id, file_paths, jd_text))
+        github_flag = require_github.lower() in ("true", "1", "yes")
+        asyncio.create_task(run_pipeline_background(job_id, file_paths, jd_text, github_flag))
 
         logger.info(f"Job {job_id} started with {len(file_paths)} resumes")
         return {
