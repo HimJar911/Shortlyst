@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     OPENAI_API_KEY: str = ""
     LLM_MODEL: str = "gpt-4o"
+    LLM_MODEL_MINI: str = "gpt-4o-mini"
 
     # Rate limits and concurrency
     GITHUB_API_REQUESTS_PER_HOUR: int = 5000

@@ -1,4 +1,5 @@
 import asyncio
+from config import settings
 from services.claude_client import call_llm_json
 from services.pdf_parser import parse_resume_mechanical
 from utils.logger import get_logger
@@ -29,7 +30,10 @@ Return this exact JSON structure:
 }}"""
 
     try:
-        result = await call_llm_json(system_prompt, user_prompt, max_tokens=1000)
+        result = await call_llm_json(
+            system_prompt, user_prompt, max_tokens=1000,
+            model=settings.LLM_MODEL_MINI,
+        )
         logger.info(
             f"JD extracted: {result.get('role_title')} | required: {result.get('required_skills')}"
         )
@@ -49,31 +53,62 @@ Return this exact JSON structure:
         }
 
 
-async def extract_candidate_info(raw_text: str, file_name: str) -> dict:
-    system_prompt = """You are parsing a resume to extract structured information.
-Be accurate and conservative. Only extract what is clearly stated."""
+async def extract_and_check(
+    raw_text: str, file_name: str, jd_requirements: dict
+) -> tuple[dict, list[dict]]:
+    """
+    Single LLM call that extracts candidate info AND checks skill requirements.
+    Replaces the old extract_candidate_info + check_skills_match two-call flow.
+    """
+    required_skills = jd_requirements.get("required_skills", [])
+    required_any = jd_requirements.get("required_skills_any_of", [])
 
-    user_prompt = f"""Extract information from this resume as JSON:
+    system_prompt = """You are parsing a resume to extract structured information AND checking if the candidate meets job requirements.
+Be accurate and conservative. Only extract what is clearly stated.
+For skill matching, be reasonable — if the resume demonstrates the concept even under a different name, count it as found."""
+
+    user_prompt = f"""Extract information from this resume AND check skill requirements.
 
 RESUME ({file_name}):
 {raw_text[:4000]}
 
+JOB REQUIRED SKILLS (candidate needs ALL): {required_skills}
+JOB REQUIRED ANY (candidate needs AT LEAST ONE): {required_any}
+
 Return this exact JSON structure:
 {{
-    "name": "full name or null",
-    "current_title": "current or most recent job title or null",
-    "skills": ["all technical skills, languages, frameworks, tools mentioned anywhere including coursework"],
-    "years_experience": null or number,
-    "education": [{{"degree": "Bachelor's/Master's/PhD/Associate's or null", "field": "field or null", "institution": "university or null", "graduation_year": null or number, "gpa": "GPA as string e.g. '3.5' or null if not mentioned"}}],
-    "projects": [{{"name": "project name", "description": "one line", "technologies": ["tech used"]}}],
-    "has_degree": true or false,
-    "total_experience_years": null or number
-}}"""
+    "candidate_info": {{
+        "name": "full name or null",
+        "current_title": "current or most recent job title or null",
+        "skills": ["all technical skills, languages, frameworks, tools mentioned anywhere including coursework"],
+        "years_experience": null or number,
+        "education": [{{"degree": "Bachelor's/Master's/PhD/Associate's or null", "field": "field or null", "institution": "university or null", "graduation_year": null or number, "gpa": "GPA as string e.g. '3.5' or null if not mentioned"}}],
+        "projects": [{{"name": "project name", "description": "one line", "technologies": ["tech used"]}}],
+        "has_degree": true or false,
+        "total_experience_years": null or number
+    }},
+    "skill_failures": [
+        {{"skill": "skill name", "reason": "why not found", "type": "required_all or required_any"}}
+    ]
+}}
+
+Skill matching rules:
+- 'data structures' satisfied by 'Data Structures & Algorithms' coursework
+- 'OOP' satisfied by Java, C++, Python
+- 'version control' satisfied by Git/GitHub
+- For required_any: only fail if NONE of the listed skills are found
+- Return empty skill_failures array if everything is satisfied"""
 
     try:
-        return await call_llm_json(system_prompt, user_prompt, max_tokens=1500)
+        result = await call_llm_json(
+            system_prompt, user_prompt, max_tokens=2000,
+            model=settings.LLM_MODEL_MINI,
+        )
+        candidate_info = result.get("candidate_info", {})
+        skill_failures = result.get("skill_failures", [])
+        return candidate_info, skill_failures
     except Exception as e:
-        logger.error(f"Failed to extract candidate info from {file_name}: {e}")
+        logger.error(f"Failed to extract+check from {file_name}: {e}")
         return {
             "name": None,
             "current_title": None,
@@ -83,56 +118,14 @@ Return this exact JSON structure:
             "projects": [],
             "has_degree": False,
             "total_experience_years": None,
-        }
-
-
-async def check_skills_match(
-    required_skills: list[str], required_any: list[str], raw_resume_text: str
-) -> list[dict]:
-    if not required_skills and not required_any:
-        return []
-
-    system_prompt = """You are checking whether a candidate's resume satisfies job requirements.
-Be reasonable — if the resume demonstrates the concept even under a different name, count it as found."""
-
-    user_prompt = f"""Check if this resume satisfies these skill requirements.
-
-REQUIRED SKILLS (candidate needs ALL):
-{required_skills}
-
-REQUIRED ANY (candidate needs AT LEAST ONE):
-{required_any}
-
-RESUME TEXT:
-{raw_resume_text[:3000]}
-
-Return JSON:
-{{"failures": [{{"skill": "skill name", "reason": "why not found", "type": "required_all or required_any"}}]}}
-
-Rules:
-- 'data structures' satisfied by 'Data Structures & Algorithms' coursework
-- 'OOP' satisfied by Java, C++, Python
-- 'version control' satisfied by Git/GitHub
-- For required_any: only fail if NONE of the listed skills are found
-- Return empty failures array if everything is satisfied"""
-
-    try:
-        result = await call_llm_json(system_prompt, user_prompt)
-        return result.get("failures", [])
-    except Exception:
-        return []
+        }, []
 
 
 async def check_hard_requirements(
-    candidate_info: dict, jd_requirements: dict, mechanical: dict
+    candidate_info: dict, jd_requirements: dict, mechanical: dict, skill_failures: list[dict]
 ) -> list[dict]:
     failures = []
 
-    skill_failures = await check_skills_match(
-        required_skills=jd_requirements.get("required_skills", []),
-        required_any=jd_requirements.get("required_skills_any_of", []),
-        raw_resume_text=mechanical.get("raw_text", ""),
-    )
     for f in skill_failures:
         failures.append({"check": "required_skill", "reason": f["reason"]})
 
@@ -184,11 +177,11 @@ async def run_phase1(file_path: str, resume_index: int, jd_requirements: dict) -
             "mechanical": mechanical,
         }
 
-    candidate_info = await extract_candidate_info(
-        mechanical["raw_text"], mechanical["file_name"]
+    candidate_info, skill_failures = await extract_and_check(
+        mechanical["raw_text"], mechanical["file_name"], jd_requirements
     )
     failures = await check_hard_requirements(
-        candidate_info, jd_requirements, mechanical
+        candidate_info, jd_requirements, mechanical, skill_failures
     )
 
     if failures:

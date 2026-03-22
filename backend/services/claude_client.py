@@ -42,13 +42,14 @@ async def call_llm(
     user_prompt: str,
     max_tokens: int = 2000,
     temperature: float = 0.0,
+    model: str | None = None,
 ) -> str:
     async with _get_llm_semaphore():
         if settings.LLM_PROVIDER == "openai":
-            return await _call_openai(system_prompt, user_prompt, max_tokens, temperature)
+            return await _call_openai(system_prompt, user_prompt, max_tokens, temperature, model=model)
         else:
             return await _call_anthropic(
-                system_prompt, user_prompt, max_tokens, temperature
+                system_prompt, user_prompt, max_tokens, temperature, model=model
             )
 
 
@@ -57,17 +58,19 @@ async def _call_openai(
     user_prompt: str,
     max_tokens: int,
     temperature: float,
+    model: str | None = None,
 ) -> str:
     from openai import RateLimitError
 
     client = _get_openai_client()
     max_retries = settings.LLM_MAX_RETRIES
     base_delay = settings.LLM_RETRY_BASE_DELAY
+    use_model = model or settings.LLM_MODEL
 
     for attempt in range(max_retries):
         try:
             response = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
+                model=use_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -124,15 +127,17 @@ async def _call_anthropic(
     user_prompt: str,
     max_tokens: int,
     temperature: float,
+    model: str | None = None,
 ) -> str:
     client = _get_anthropic_client()
     max_retries = settings.LLM_MAX_RETRIES
     base_delay = settings.LLM_RETRY_BASE_DELAY
+    use_model = model or settings.LLM_MODEL
 
     for attempt in range(max_retries):
         try:
             response = await client.messages.create(
-                model=settings.LLM_MODEL,
+                model=use_model,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system_prompt,
@@ -163,6 +168,7 @@ async def call_llm_json(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = 2000,
+    model: str | None = None,
 ) -> dict:
     import json
 
@@ -171,7 +177,7 @@ async def call_llm_json(
         + "\n\nYou must respond with valid JSON only. No markdown, no backticks, no explanation. Just the JSON object."
     )
 
-    raw = await call_llm(full_system, user_prompt, max_tokens, temperature=0.0)
+    raw = await call_llm(full_system, user_prompt, max_tokens, temperature=0.0, model=model)
 
     raw = raw.strip()
     if raw.startswith("```"):

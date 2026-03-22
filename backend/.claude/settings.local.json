@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill //F //IM python.exe //FI \"WINDOWTITLE eq *uvicorn*\")",
+      "Bash(pkill -f uvicorn)"
+    ]
+  }
+}

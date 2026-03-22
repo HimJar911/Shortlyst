@@ -30,40 +30,73 @@ def build_commit_timeline(commit_messages: list[str]) -> str:
     return "\n".join(lines)
 
 
-async def assess_repo_holistically(
-    repo_name: str,
-    readme: str | None,
-    folder_tree: str,
-    languages: dict,
-    source_files: dict,
-    commit_messages: list[str],
-    repo_metadata: dict,
-) -> dict:
+def _default_repo_assessment(repo_name: str = "unknown") -> dict:
+    return {
+        "repo_name": repo_name,
+        "problem_difficulty": "simple",
+        "problem_summary": "Could not assess",
+        "architecture_quality": "fair",
+        "architecture_notes": "Could not assess",
+        "code_sophistication": "fair",
+        "code_notes": "Could not assess",
+        "commit_signal": "none",
+        "commit_notes": "Could not assess",
+        "is_tutorial_clone": False,
+        "has_deployment_config": False,
+        "overall_complexity": "basic",
+        "overall_quality": "fair",
+        "summary": "Assessment failed",
+        "standout_signals": [],
+        "concerns": [],
+    }
+
+
+async def assess_repos_batch(repos_data: list[dict]) -> list[dict]:
     """
-    Single holistic LLM call that judges a repo in full context.
-    Weighs: problem difficulty > architecture > code quality >> commits (soft bonus only)
+    Single LLM call that assesses ALL top repos for a candidate at once.
+    Replaces N separate assess_repo_holistically calls.
     """
+    if not repos_data:
+        return []
 
-    # Build source files section
-    files_text = ""
-    if source_files:
-        for filename, content in source_files.items():
-            files_text += f"\n--- {filename} ---\n{content}\n"
-    else:
-        files_text = "No source files could be fetched."
+    # Build per-repo sections
+    repo_sections = []
+    for repo in repos_data:
+        source_files = repo.get("source_files", {})
+        languages = repo.get("languages", {})
+        commit_messages = repo.get("commit_messages", [])
 
-    # Languages with byte counts
-    lang_text = (
-        ", ".join(f"{lang} ({bytes_:,} bytes)" for lang, bytes_ in languages.items())
-        if languages
-        else "Unknown"
-    )
+        files_text = ""
+        if source_files:
+            for filename, content in source_files.items():
+                files_text += f"\n--- {filename} ---\n{content}\n"
+        else:
+            files_text = "No source files fetched."
 
-    # Commit timeline — framed explicitly as lowest weight signal
-    commit_text = build_commit_timeline(commit_messages)
-    commit_count = len(commit_messages)
+        lang_text = (
+            ", ".join(f"{lang} ({bytes_:,} bytes)" for lang, bytes_ in languages.items())
+            if languages
+            else "Unknown"
+        )
 
-    system_prompt = """You are a senior engineering hiring manager assessing a candidate's GitHub repository.
+        tree_lines = [f"  {fname}" for fname in source_files.keys()]
+        folder_tree = "\n".join(tree_lines) if tree_lines else "Structure not available"
+
+        commit_text = build_commit_timeline(commit_messages)
+
+        section = f"""=== REPO: {repo['name']} ===
+Stars: {repo.get('stars', 0)} | Size: {repo.get('size', 0)}KB | Language: {repo.get('language', 'Unknown')}
+README: {(repo.get('readme') or 'No README found.')[:1500]}
+FOLDER STRUCTURE: {folder_tree}
+LANGUAGES: {lang_text}
+SOURCE FILES ({len(source_files)} files): {files_text[:4000]}
+COMMITS ({len(commit_messages)} — low weight signal): {commit_text}"""
+        repo_sections.append(section)
+
+    all_repos_text = "\n\n".join(repo_sections)
+    repo_names = [r["name"] for r in repos_data]
+
+    system_prompt = """You are a senior engineering hiring manager assessing a candidate's GitHub repositories.
 Your job is to judge the real sophistication of what was built — not surface patterns like test coverage or docstrings.
 
 Weight your judgment in this exact order:
@@ -73,78 +106,60 @@ Weight your judgment in this exact order:
 4. LOWEST — Commit history: Treat this as a soft positive signal only. Many students build locally and push once.
    Few commits or a single push = completely neutral. Never penalize for this. Only give slight bonus for genuine development history."""
 
-    user_prompt = f"""Assess this GitHub repository holistically.
+    user_prompt = f"""Assess each of these {len(repos_data)} GitHub repositories holistically.
 
-REPO: {repo_name}
-Stars: {repo_metadata.get('stars', 0)} | Size: {repo_metadata.get('size', 0)}KB | Language: {repo_metadata.get('language', 'Unknown')}
+{all_repos_text}
 
-README:
-{(readme or 'No README found.')[:2000]}
-
-FOLDER STRUCTURE:
-{folder_tree or 'Could not fetch folder structure.'}
-
-LANGUAGES USED (GitHub byte analysis):
-{lang_text}
-
-SOURCE FILES SAMPLED ({len(source_files)} files):
-{files_text[:7000]}
-
-COMMIT HISTORY ({commit_count} commits — low weight signal):
-{commit_text}
-
-Return this exact JSON:
+For EACH repo return an assessment object. Return JSON:
 {{
-    "problem_difficulty": "trivial/simple/moderate/complex/advanced",
-    "problem_summary": "one sentence — what does this project actually do",
-    "architecture_quality": "poor/fair/good/excellent",
-    "architecture_notes": "one sentence on folder structure and separation of concerns",
-    "code_sophistication": "poor/fair/good/excellent",
-    "code_notes": "one sentence on the actual logic and engineering in sampled files",
-    "commit_signal": "none/weak/moderate/strong",
-    "commit_notes": "one sentence — only note if genuinely interesting, otherwise say single push or sparse history is neutral",
-    "is_tutorial_clone": true or false,
-    "has_deployment_config": true or false,
-    "overall_complexity": "trivial/basic/intermediate/advanced",
-    "overall_quality": "poor/fair/good/excellent",
-    "summary": "2-3 sentence honest holistic assessment — lead with what the project IS, then judge the engineering",
-    "standout_signals": ["up to 3 genuinely impressive things if any"],
-    "concerns": ["up to 3 real concerns — only things that actually matter"]
+    "assessments": [
+        {{
+            "repo_name": "exact repo name",
+            "problem_difficulty": "trivial/simple/moderate/complex/advanced",
+            "problem_summary": "one sentence — what does this project actually do",
+            "architecture_quality": "poor/fair/good/excellent",
+            "architecture_notes": "one sentence on folder structure and separation of concerns",
+            "code_sophistication": "poor/fair/good/excellent",
+            "code_notes": "one sentence on the actual logic and engineering in sampled files",
+            "commit_signal": "none/weak/moderate/strong",
+            "commit_notes": "one sentence — only note if genuinely interesting, otherwise say neutral",
+            "is_tutorial_clone": true or false,
+            "has_deployment_config": true or false,
+            "overall_complexity": "trivial/basic/intermediate/advanced",
+            "overall_quality": "poor/fair/good/excellent",
+            "summary": "2-3 sentence honest holistic assessment",
+            "standout_signals": ["up to 3 genuinely impressive things if any"],
+            "concerns": ["up to 3 real concerns — only things that actually matter"]
+        }}
+    ]
 }}
 
-Complexity definitions — judge by problem being solved, not lines of code:
-- trivial: hello world, static portfolio, direct tutorial copy
-- basic: single-purpose tool, simple REST API, straightforward script
-- intermediate: multi-component system, real integrations, async operations, non-trivial state
-- advanced: distributed systems, multi-agent pipelines, production infrastructure, novel problem solving
+Complexity: trivial (hello world) < basic (single-purpose tool) < intermediate (multi-component, real integrations) < advanced (distributed systems, multi-agent pipelines)
+Quality: poor (broken/plagiarized) < fair (shallow/copy-paste) < good (clean, real thought) < excellent (impressive architecture, production-grade)
 
-Quality definitions:
-- poor: broken, plagiarized, empty, or completely non-functional
-- fair: works but shallow, copy-paste heavy, or far below what the README claims
-- good: clean purposeful code that solves a real problem with real thought
-- excellent: impressive architecture, non-trivial solutions, production-grade thinking"""
+You MUST return one assessment per repo: {repo_names}"""
 
     try:
-        return await call_llm_json(system_prompt, user_prompt, max_tokens=1000)
+        result = await call_llm_json(system_prompt, user_prompt, max_tokens=2000)
+        assessments = result.get("assessments", [])
+
+        # Build lookup by repo_name
+        assessment_map = {a.get("repo_name", ""): a for a in assessments}
+
+        # Return in same order as input, with fallbacks for missing ones
+        ordered = []
+        for repo in repos_data:
+            name = repo["name"]
+            if name in assessment_map:
+                ordered.append(assessment_map[name])
+            else:
+                logger.warning(f"No assessment returned for repo {name}, using default")
+                ordered.append(_default_repo_assessment(name))
+        return ordered
+
     except Exception as e:
-        logger.error(f"Holistic repo assessment failed for {repo_name}: {e}")
-        return {
-            "problem_difficulty": "simple",
-            "problem_summary": "Could not assess",
-            "architecture_quality": "fair",
-            "architecture_notes": "Could not assess",
-            "code_sophistication": "fair",
-            "code_notes": "Could not assess",
-            "commit_signal": "none",
-            "commit_notes": "Could not assess",
-            "is_tutorial_clone": False,
-            "has_deployment_config": False,
-            "overall_complexity": "basic",
-            "overall_quality": "fair",
-            "summary": "Assessment failed",
-            "standout_signals": [],
-            "concerns": [],
-        }
+        logger.error(f"Batch repo assessment failed: {e}")
+        return [_default_repo_assessment(r["name"]) for r in repos_data]
 
 
 async def analyze_github_profile(
@@ -155,40 +170,14 @@ async def analyze_github_profile(
     repos = github_data.get("repos", [])
     top_repos_data = github_data.get("top_repos_data", [])
 
-    # Run holistic assessment for each repo — all in parallel
-    assessment_tasks = []
     for repo in top_repos_data:
-        # Build folder tree from repo root contents if available
-        # (we don't have it here but we have structure from source_files paths)
         source_files = repo.get("source_files", {})
         logger.info(
             f"Repo {repo['name']}: {len(source_files)} source files: {list(source_files.keys())}"
         )
 
-        # Infer folder tree from source file paths we successfully read
-        tree_lines = []
-        seen_dirs = set()
-        for fname in source_files.keys():
-            tree_lines.append(f"📄 {fname}")
-        folder_tree = "\n".join(tree_lines) if tree_lines else "Structure not available"
-
-        assessment_tasks.append(
-            assess_repo_holistically(
-                repo_name=repo["name"],
-                readme=repo.get("readme"),
-                folder_tree=folder_tree,
-                languages=repo.get("languages", {}),
-                source_files=source_files,
-                commit_messages=repo.get("commit_messages", []),
-                repo_metadata={
-                    "stars": repo.get("stars", 0),
-                    "size": repo.get("size", 0),
-                    "language": repo.get("language"),
-                },
-            )
-        )
-
-    assessments = await asyncio.gather(*assessment_tasks)
+    # Single batched LLM call for all repos
+    assessments = await assess_repos_batch(top_repos_data)
 
     # Build repo analyses
     repo_analyses = []

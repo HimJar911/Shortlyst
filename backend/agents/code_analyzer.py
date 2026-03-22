@@ -13,26 +13,26 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def verify_jd_skills(
+async def verify_all_jd_skills(
     source_files: dict,
     readme_text: str,
     required_skills: list[str],
     required_any_of: list[str],
+    preferred_skills: list[str],
 ) -> dict:
     """
-    Verifies only JD-required skills against code + README evidence.
-
-    Returns:
-    {
-        "required": [{"skill": ..., "status": ..., "evidence": ...}, ...],
-        "any_of":   [{"skill": ..., "status": ..., "evidence": ...}, ...],
-        "any_of_satisfied": bool  -- true if at least one any_of skill is confirmed
-    }
+    Single LLM call that verifies ALL JD skills (required + any_of + preferred)
+    against code + README evidence.
     """
-    all_jd_skills = list(set(required_skills + required_any_of))
+    all_jd_skills = list(set(required_skills + required_any_of + preferred_skills))
 
     if not all_jd_skills:
-        return {"required": [], "any_of": [], "any_of_satisfied": False}
+        return {
+            "required": [],
+            "any_of": [],
+            "preferred": [],
+            "any_of_satisfied": False,
+        }
 
     has_code = bool(source_files)
     has_readme = bool(readme_text and readme_text.strip())
@@ -46,9 +46,11 @@ async def verify_jd_skills(
             }
             for s in all_jd_skills
         ]
+        verdict_map = {e["skill"]: e for e in empty}
         return {
-            "required": [e for e in empty if e["skill"] in required_skills],
-            "any_of": [e for e in empty if e["skill"] in required_any_of],
+            "required": [verdict_map[s] for s in required_skills if s in verdict_map],
+            "any_of": [verdict_map[s] for s in required_any_of if s in verdict_map],
+            "preferred": [verdict_map[s] for s in preferred_skills if s in verdict_map],
             "any_of_satisfied": False,
         }
 
@@ -65,7 +67,6 @@ Evidence sources:
 Both are valid. README mention of a technology counts as confirmation.
 Be specific about where you saw evidence."""
 
-    # Build languages summary from github_signal for extra context
     user_prompt = f"""Verify these job-required skills against the candidate's GitHub evidence.
 
 REQUIRED SKILLS (candidate needs ALL):
@@ -73,6 +74,9 @@ REQUIRED SKILLS (candidate needs ALL):
 
 ANY-OF SKILLS (candidate needs AT LEAST ONE):
 {required_any_of}
+
+PREFERRED SKILLS (nice to have):
+{preferred_skills}
 
 README CONTENT FROM ALL REPOS:
 {readme_text[:3000] if has_readme else "No README available"}
@@ -100,7 +104,7 @@ Return JSON:
     ]
 }}
 
-Include every skill from both lists. README mentions count as confirmation."""
+Include EVERY skill from ALL three lists. README mentions count as confirmation."""
 
     try:
         result = await call_llm_json(system_prompt, user_prompt, max_tokens=2000)
@@ -121,11 +125,13 @@ Include every skill from both lists. README mentions count as confirmation."""
             verdict_map[s] for s in required_skills if s in verdict_map
         ]
         any_of_verdicts = [verdict_map[s] for s in required_any_of if s in verdict_map]
+        preferred_verdicts = [verdict_map[s] for s in preferred_skills if s in verdict_map]
         any_of_satisfied = any(v["status"] == "confirmed" for v in any_of_verdicts)
 
         return {
             "required": required_verdicts,
             "any_of": any_of_verdicts,
+            "preferred": preferred_verdicts,
             "any_of_satisfied": any_of_satisfied,
         }
 
@@ -135,9 +141,11 @@ Include every skill from both lists. README mentions count as confirmation."""
             {"skill": s, "status": "unverified", "evidence": "Analysis failed"}
             for s in all_jd_skills
         ]
+        verdict_map = {e["skill"]: e for e in empty}
         return {
-            "required": [e for e in empty if e["skill"] in required_skills],
-            "any_of": [e for e in empty if e["skill"] in required_any_of],
+            "required": [verdict_map[s] for s in required_skills if s in verdict_map],
+            "any_of": [verdict_map[s] for s in required_any_of if s in verdict_map],
+            "preferred": [verdict_map[s] for s in preferred_skills if s in verdict_map],
             "any_of_satisfied": False,
         }
 
@@ -282,32 +290,23 @@ async def run_code_analysis(
         f"{len(all_source_files)} source files, "
         f"{len(cached_readmes)} READMEs, "
         f"languages: {languages_found}, "
-        f"{len(required_skills)} required + {len(required_any_of)} any-of skills"
+        f"{len(required_skills)} required + {len(required_any_of)} any-of + {len(preferred_skills)} preferred skills"
     )
 
-    # Verify preferred skills too (already filtered to technical ones)
-    preferred_verdicts = []
-    if preferred_skills:
-        preferred_result = await verify_jd_skills(
-            source_files=all_source_files,
-            readme_text=combined_readme,
-            required_skills=preferred_skills,
-            required_any_of=[],
-        )
-        preferred_verdicts = preferred_result["required"]
-
-    result = await verify_jd_skills(
+    # Single LLM call for all skill categories
+    result = await verify_all_jd_skills(
         source_files=all_source_files,
         readme_text=combined_readme,
         required_skills=required_skills,
         required_any_of=required_any_of,
+        preferred_skills=preferred_skills,
     )
 
-    # Flatten all verdicts — required + any_of + preferred, all treated equally
+    preferred_verdicts = result["preferred"]
     all_verdicts = result["required"] + result["any_of"] + preferred_verdicts
     confirmed = [v for v in all_verdicts if v["status"] == "confirmed"]
 
-    total_slots = len(required_skills) + len(required_any_of) + len(preferred_verdicts)
+    total_slots = len(required_skills) + len(required_any_of) + len(preferred_skills)
     confirmed_slots = len(confirmed)
 
     summary = f"{confirmed_slots}/{total_slots} JD skills verified"

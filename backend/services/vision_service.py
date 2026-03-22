@@ -1,8 +1,20 @@
 import asyncio
 from config import settings
+from services.claude_client import _get_llm_semaphore
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Reuse the cached clients from claude_client to avoid creating new ones
+_openai_vision_client = None
+
+
+def _get_openai_vision_client():
+    global _openai_vision_client
+    if _openai_vision_client is None:
+        from openai import AsyncOpenAI
+        _openai_vision_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    return _openai_vision_client
 
 
 async def assess_screenshot(
@@ -11,10 +23,12 @@ async def assess_screenshot(
     page_title: str | None,
     visible_text: str | None,
 ) -> dict:
-    if settings.LLM_PROVIDER == "openai":
-        return await _assess_openai(screenshot_base64, url, page_title, visible_text)
-    else:
-        return await _assess_anthropic(screenshot_base64, url, page_title, visible_text)
+    # Route through shared semaphore to prevent TPM spikes
+    async with _get_llm_semaphore():
+        if settings.LLM_PROVIDER == "openai":
+            return await _assess_openai(screenshot_base64, url, page_title, visible_text)
+        else:
+            return await _assess_anthropic(screenshot_base64, url, page_title, visible_text)
 
 
 async def _assess_openai(
@@ -23,9 +37,7 @@ async def _assess_openai(
     page_title: str | None,
     visible_text: str | None,
 ) -> dict:
-    from openai import AsyncOpenAI
-
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    client = _get_openai_vision_client()
 
     prompt = f"""You are evaluating a deployed web project from a job candidate's portfolio.
 
@@ -48,7 +60,7 @@ Be honest and critical. A real app has actual content, real functionality, and e
 
     try:
         response = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
+            model=settings.LLM_MODEL_MINI,
             messages=[
                 {
                     "role": "user",
@@ -110,7 +122,7 @@ Be honest and critical."""
 
     try:
         response = await client.messages.create(
-            model=settings.LLM_MODEL,
+            model=settings.LLM_MODEL_MINI,
             max_tokens=500,
             messages=[
                 {
