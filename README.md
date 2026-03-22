@@ -1,10 +1,10 @@
-# Shortlyst — Setup After Pulling
+# Shortlyst ï¿½ Setup After Pulling
 
-## Step 1 — Install Python 3.12
+## Step 1 ï¿½ Install Python 3.12
 Download and run: https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
 During install: check "Add python.exe to PATH" then click Install Now
 
-## Step 2 — Backend setup
+## Step 2 ï¿½ Backend setup
 ```powershell
 cd shortlyst/backend
 py -3.12 -m venv venv
@@ -14,25 +14,25 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## Step 3 — Frontend setup
+## Step 3 ï¿½ Frontend setup
 ```powershell
 cd shortlyst/frontend
 npm install
 ```
 
-## Step 4 — Install Redis
+## Step 4 ï¿½ Install Redis
 ```powershell
 scoop install redis
 ```
 
-## Step 5 — Set up .env
+## Step 5 ï¿½ Set up .env
 ```powershell
 cd shortlyst/backend
 Copy-Item .env.example .env
 # Open .env and fill in the API keys Himanshu sends you
 ```
 
-## Step 6 — Verify everything
+## Step 6 ï¿½ Verify everything
 ```powershell
 # Backend
 cd shortlyst/backend
@@ -45,4 +45,6 @@ npm run dev
 
 # Redis
 redis-server
+
 ```
+SQL
