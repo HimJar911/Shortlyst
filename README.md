@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#quickstart">Quickstart</a> · <a href="#architecture">Architecture</a> · <a href="#api">API</a> · <a href="#contributing">Contributing</a>
+  <a href="https://shortlyst-five.vercel.app">Live Demo</a> · <a href="#quickstart">Quickstart</a> · <a href="#architecture">Architecture</a> · <a href="#api">API</a>
 </p>
 
 ---
@@ -27,10 +27,17 @@ Resumes lie. Candidates list skills they barely touched, link repos full of tuto
 | Phase | Method | Detail |
 |-------|--------|--------|
 | **Filter** | LLM parsing + deterministic checks | Hard-gate on skills, experience, education, GitHub presence. Eliminated candidates get specific reasons. |
-| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed via batched LLM. Skills matched via regex against source. URLs screenshotted with Playwright and analyzed by vision AI. |
+| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed holistically via LLM. Skills cross-referenced against actual source code and README evidence. URLs screenshotted with Playwright and analyzed by Vision AI. |
 | **Rank** | Single weighted LLM call | GitHub (50%) · Deployment (30%) · Skills match (20%) |
 
 All phases stream progress via SSE in real time.
+
+## Live Deployment
+
+| Service | URL |
+|---------|-----|
+| Frontend | [shortlyst-five.vercel.app](https://shortlyst-five.vercel.app) |
+| Backend API | AWS ECS (Fargate) behind ALB |
 
 ## Architecture
 
@@ -43,23 +50,24 @@ All phases stream progress via SSE in real time.
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
 | Backend | FastAPI + Uvicorn | Async-native, SSE, Pydantic validation |
-| LLM | GPT-4o / Claude (configurable) | OpenAI for vision, either for text |
-| Resume parsing | pdfplumber | Text + annotation extraction |
+| LLM | Claude / GPT-4o (configurable) | Claude for reasoning, GPT-4o Vision for screenshots |
+| Resume parsing | pdfplumber | Text + annotation URL extraction |
 | Browser | Playwright | Headless Chromium screenshots |
-| Cache | Redis | Job state, SSE queue, GitHub cache (1h TTL) |
-| HTTP | httpx | Async with retry + rate-limit handling |
-| Frontend | Next.js 16, React 19, Zustand | Server components, TypeScript |
+| Cache | Redis | Job state, SSE queue, GitHub cache |
+| HTTP | httpx | Async with semaphore + retry on 403 |
+| Frontend | Next.js 16, React 19, Zustand | SSE-driven real-time updates, TypeScript |
+| Hosting | Vercel (frontend) + AWS ECS Fargate (backend) | |
 
-## Quickstart
+## Quickstart (Local)
 
-**Prerequisites:** Python 3.12+ · Node.js 18+ · Redis · API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`)
+**Prerequisites:** Python 3.12+ · Node.js 18+ · Redis · API keys
 
 ```bash
 git clone https://github.com/HimJar911/Shortlyst.git && cd Shortlyst
 
 # backend
 cd backend
-python -m venv venv && source venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
+python -m venv venv && .\venv\Scripts\Activate.ps1   # Windows
 pip install -r requirements.txt
 python -m playwright install chromium
 
@@ -76,27 +84,26 @@ GITHUB_TOKEN=ghp_...
 REDIS_URL=redis://localhost:6379/0
 LLM_PROVIDER=openai          # openai | anthropic
 LLM_MODEL=gpt-4o
-LLM_MODEL_MINI=gpt-4o-mini
-LLM_MAX_CONCURRENT=3
+PLAYWRIGHT_NAVIGATION_TIMEOUT=30000
 ```
 
 ```bash
-redis-server                                    # T1
-cd backend && uvicorn main:app --reload         # T2
-cd frontend && npm run dev                      # T3
+redis-server                                    # Terminal 1
+cd backend && uvicorn main:app --port 8000      # Terminal 2
+cd frontend && npm run dev                      # Terminal 3
 ```
 
 → [localhost:3000](http://localhost:3000)
 
-**Docker:** `docker-compose up --build`
+> **Before each run:** `redis-cli FLUSHDB`
 
 ## Usage
 
 1. Paste or upload a job description.
 2. Drop resume PDFs (batch supported).
 3. Toggle **Require GitHub** if needed.
-4. Click **Analyze Candidates** — watch real-time progress.
-5. View ranked results with scores, evidence, and elimination reasons.
+4. Click **Analyze Candidates** — watch real-time progress via live log feed.
+5. View ranked results with scores, skill verification badges, deployment status, and elimination reasons.
 
 ## API
 
@@ -106,10 +113,8 @@ cd frontend && npm run dev                      # T3
 
 | Field | Type | Required | Notes |
 |-------|------|:--------:|-------|
-| `jd_text` | string | * | *One of `jd_text` / `jd_file` required |
-| `jd_file` | file | * | Job description PDF |
-| `resumes` | file[] | ✓ | Max 1000, 10MB each |
-| `require_github` | bool | | Default `false` |
+| `jd_text` | string | ✓ | Job description as plain text |
+| `resumes` | file[] | ✓ | PDF resumes, max 1000 |
 
 ```json
 → { "job_id": "abc-123", "status": "queued", "total_resumes": 5 }
@@ -121,30 +126,23 @@ SSE. Events: `phase_start` · `jd_parsed` · `candidate_passed_phase1` · `candi
 
 ### `GET /jobs/{job_id}/results`
 
-Ranked + eliminated candidates with scores and reasoning. `202` if processing, `404` if not found.
+Ranked + eliminated candidates with scores and reasoning. `202` if still processing.
 
 ### `GET /health`
 
 `→ { "status": "ok" }`
 
-
 ## Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| Deterministic skill verification | Regex against source code. No LLM. Reproducible, fast, auditable. Case-sensitive for short names (Go, R, C). |
-| Single-call batching | One LLM call for all repos, one for all candidates. Cuts latency and cost vs per-item. |
-| Deployment screenshot + vision | Headless Chromium screenshots → vision AI distinguishes real apps from templates. |
+| Holistic GitHub assessment | Single LLM call per repo sees README + folder tree + languages + source files + commits. Problem difficulty as multiplier — advanced×good beats simple×excellent. |
+| README as skill evidence | If a candidate didn't document their tech stack, that's a signal. README mentions count as confirmed skills. |
+| JD-only skill verification | Skills section shows only what the JD asks for. Resume skills are noise to the recruiter. |
+| Deployment screenshot + Vision AI | Headless Chromium screenshots → Vision AI distinguishes real apps from templates and dead links. |
 | Soft commit signals | Commit frequency informs but never penalizes. Sparse history ≠ bad engineer. |
-| Concurrency semaphore | `LLM_MAX_CONCURRENT` prevents TPM spikes. Exponential backoff + jitter on 429s. |
-| GitHub caching | Redis, 1h TTL. Same candidate across runs = one API call. |
-
-## Contributing
-
-1. Fork → feature branch → PR against `main`
-2. Backend: `pytest`. LLM calls go through `claude_client` abstraction.
-3. Frontend: `npm run build` must pass clean.
-4. SSE changes: update both `backend/models/result.py` and `frontend/src/lib/api.ts`.
+| GitHub semaphore | Caps concurrent API requests at 10. Prevents secondary rate limit bursts across parallel candidates. |
+| Redis caching | GitHub data cached per username. Same candidate across runs = one API call. |
 
 ## License
 
