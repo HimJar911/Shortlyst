@@ -1,11 +1,33 @@
 "use client";
 
+import { useState } from "react";
 import type { Candidate } from "@/types";
 import { glass } from "@/lib/styles";
 import SectionLabel from "@/components/ui/SectionLabel";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SkillBadge from "@/components/ui/SkillBadge";
 import InsightCard from "@/components/ui/InsightCard";
+
+function HoverCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        ...glass.surface,
+        transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+        background: hovered ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.45)",
+        border: hovered ? "1px solid rgba(255,255,255,0.9)" : "1px solid rgba(255,255,255,0.5)",
+        boxShadow: hovered ? "0 8px 32px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(255,255,255,0.3)" : "0 2px 12px rgba(0,0,0,0.03)",
+        transform: hovered ? "translateY(-2px)" : "translateY(0)",
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function CandidateDetail({ candidate }: { candidate: Candidate }) {
   // Flat skill counting — all JD skills equal weight
@@ -80,10 +102,10 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
             { label: "Commits (6mo)", value: candidate.github.commits6mo },
             { label: "Activity", value: candidate.github.activity },
           ].map(m => (
-            <div key={m.label} style={{ padding: "18px 20px", borderRadius: 10, ...glass.surface }}>
+            <HoverCard key={m.label} style={{ padding: "18px 20px", borderRadius: 10 }}>
               <div style={{ fontSize: 10, fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-400)", marginBottom: 6 }}>{m.label}</div>
               <div style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)" }}>{m.value}</div>
-            </div>
+            </HoverCard>
           ))}
         </div>
       </div>
@@ -93,7 +115,7 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
           <div>
             <SectionLabel>Top Repositories</SectionLabel>
-            <div style={{ ...glass.surface, borderRadius: 12, padding: "4px 20px" }}>
+            <HoverCard style={{ borderRadius: 12, padding: "4px 20px" }}>
               {candidate.github.topRepos.map((r, i) => (
                 <div key={r.name} style={{ padding: "16px 0", borderBottom: i < candidate.github.topRepos.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
@@ -108,11 +130,11 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
               {candidate.github.topRepos.length === 0 && (
                 <p style={{ fontSize: 13, color: "var(--gray-400)", fontStyle: "italic", padding: "16px 0" }}>No significant repositories found</p>
               )}
-            </div>
+            </HoverCard>
           </div>
           <div>
             <SectionLabel>Deployments</SectionLabel>
-            <div style={{ ...glass.surface, borderRadius: 12, padding: "4px 20px" }}>
+            <HoverCard style={{ borderRadius: 12, padding: "4px 20px" }}>
               {candidate.deployments.map((d, i) => (
                 <div key={d.url} style={{ padding: "16px 0", borderBottom: i < candidate.deployments.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -122,7 +144,7 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
                   <p style={{ fontSize: 13, color: "var(--gray-500)", fontWeight: 300, lineHeight: 1.5 }}>{d.desc}</p>
                 </div>
               ))}
-            </div>
+            </HoverCard>
           </div>
         </div>
       </div>

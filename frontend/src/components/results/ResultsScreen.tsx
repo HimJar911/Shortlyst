@@ -7,6 +7,34 @@ import { useJobStore } from "@/store/jobStore";
 import { fetchResults, ApiError } from "@/lib/api";
 import { transformResults } from "@/lib/transformers";
 
+function SidebarRow({ children, as: Tag = "div", style, ...rest }: { children: React.ReactNode; as?: "button" | "div"; style?: React.CSSProperties } & Record<string, unknown>) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Tag
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        ...style,
+        position: "relative" as const,
+        transition: "all 0.2s ease-out",
+        ...(hovered ? {
+          background: "rgba(255,255,255,0.3)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderRadius: 9999,
+          border: "1px solid rgba(255,255,255,0.45)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.5)",
+          transform: "scale(1.03)",
+          zIndex: 2,
+        } : {}),
+      } as React.CSSProperties}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}
+
 export default function ResultsScreen() {
   const [sidebarView, setSidebarView] = useState<"ranked" | "eliminated">("ranked");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -120,10 +148,9 @@ export default function ResultsScreen() {
             {sidebarView === "ranked" && candidates.map(c => {
               const isActive = c.id === selectedCandidate?.id;
               return (
-                <button key={c.id} onClick={() => selectCandidate(c.id)} style={{
+                <SidebarRow key={c.id} as="button" onClick={() => selectCandidate(c.id)} style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 12,
                   padding: "14px 20px", border: "none", cursor: "pointer", textAlign: "left",
-                  transition: "all 0.15s",
                   background: isActive ? "rgba(255,255,255,0.6)" : "transparent",
                   borderRight: isActive ? "3px solid var(--black)" : "3px solid transparent",
                   backdropFilter: isActive ? "blur(8px)" : "none",
@@ -135,14 +162,14 @@ export default function ResultsScreen() {
                     <div style={{ fontSize: 11, color: "var(--gray-400)", fontWeight: 300, marginTop: 1 }}>{c.school ? (c.school.length > 22 ? c.school.slice(0, 22) + "…" : c.school) : ""}</div>
                   </div>
                   <span style={{ fontFamily: "var(--serif)", fontSize: 18, color: isActive ? "var(--black)" : "var(--gray-500)", flexShrink: 0 }}>{c.score}</span>
-                </button>
+                </SidebarRow>
               );
             })}
             {sidebarView === "eliminated" && eliminated.map((c, i) => (
-              <div key={i} style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+              <SidebarRow key={i} style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: "var(--black)", marginBottom: 3 }}>{c.name}</div>
                 <div style={{ fontSize: 11, color: "var(--gray-500)", fontWeight: 300, lineHeight: 1.4 }}>{c.reason}</div>
-              </div>
+              </SidebarRow>
             ))}
           </div>
         </aside>
