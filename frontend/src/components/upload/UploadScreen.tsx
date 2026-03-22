@@ -330,26 +330,66 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             <div>
               {/* height+lineHeight match the JD flex row height so both cards start at the same Y */}
               <label style={{ display: "block", fontSize: 12, fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-700)", fontWeight: 600, marginBottom: 12, height: 24, lineHeight: "24px" }}>
-                Resumes {resumeFiles.length > 0 && `· ${resumeFiles.length} files`}
+                Resumes {resumeFiles.length > 0 && `· ${resumeFiles.length} ${resumeFiles.length === 1 ? "file" : "files"} selected`}
               </label>
 
               <div
                 onDragOver={e => { e.preventDefault(); setDragOverResumes(true); }}
                 onDragLeave={() => setDragOverResumes(false)}
-                onDrop={e => { e.preventDefault(); setDragOverResumes(false); setResumeFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
+                onDrop={e => { e.preventDefault(); setDragOverResumes(false); setResumeFiles(prev => { const newFiles = Array.from(e.dataTransfer.files).filter(f => !prev.some(ex => ex.name === f.name && ex.size === f.size)); return [...prev, ...newFiles]; }); }}
                 onClick={() => {
                   const i = document.createElement("input");
                   i.type = "file"; i.accept = ".pdf"; i.multiple = true;
-                  i.onchange = (e) => { const t = e.target as HTMLInputElement; if (t.files) setResumeFiles(prev => [...prev, ...Array.from(t.files!)]); };
+                  i.onchange = (e) => { const t = e.target as HTMLInputElement; if (t.files) setResumeFiles(prev => { const newFiles = Array.from(t.files!).filter(f => !prev.some(ex => ex.name === f.name && ex.size === f.size)); return [...prev, ...newFiles]; }); };
                   i.click();
                 }}
                 style={dropZoneStyle(dragOverResumes)}
               >
                 {resumeFiles.length > 0 ? (
-                  <div style={{ textAlign: "center", padding: 16 }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>📑</div>
-                    <p style={{ fontSize: 14, fontWeight: 500 }}>{resumeFiles.length} resume{resumeFiles.length > 1 ? "s" : ""} selected</p>
-                    <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 4 }}>Click to add more</p>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", padding: "14px 14px 8px" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", maxHeight: 180, overflowY: "auto", width: "100%" }}>
+                      {resumeFiles.map((file, idx) => (
+                        <div
+                          key={`${file.name}-${idx}`}
+                          style={{
+                            width: 70, height: 85, borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative",
+                            background: "rgba(255,255,255,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                            border: "1px solid rgba(255,255,255,0.6)", transition: "box-shadow 0.2s, transform 0.2s",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+                        >
+                          {/* Remove button */}
+                          <button
+                            onClick={e => { e.stopPropagation(); setResumeFiles(prev => prev.filter((_, i) => i !== idx)); }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,38,38,0.12)"; e.currentTarget.style.color = "#dc2626"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.06)"; e.currentTarget.style.color = "rgba(0,0,0,0.45)"; }}
+                            style={{
+                              position: "absolute", top: 3, right: 3, width: 16, height: 16, borderRadius: "50%",
+                              background: "rgba(0,0,0,0.06)", border: "none", cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", padding: 0, lineHeight: 1,
+                              fontSize: 9, color: "rgba(0,0,0,0.45)", transition: "background 0.15s",
+                            }}
+                          >✕</button>
+                          {/* Page icon SVG */}
+                          <svg viewBox="0 0 32 40" width="28" height="35" style={{ marginBottom: 4, flexShrink: 0 }}>
+                            <path d="M2 2h20l8 8v28H2z" fill="#ebe7f0" stroke="rgba(0,0,0,0.1)" strokeWidth="1"/>
+                            <path d="M22 2l8 8h-8z" fill="#d8d3e0" stroke="rgba(0,0,0,0.08)" strokeWidth="0.5"/>
+                            <circle cx="25" cy="6" r="1.5" fill="#e57373"/>
+                            <line x1="7" y1="16" x2="25" y2="16" stroke="rgba(0,0,0,0.13)" strokeWidth="1.2"/>
+                            <line x1="7" y1="21" x2="22" y2="21" stroke="rgba(0,0,0,0.1)" strokeWidth="1.2"/>
+                            <line x1="7" y1="26" x2="20" y2="26" stroke="rgba(0,0,0,0.1)" strokeWidth="1.2"/>
+                            <line x1="7" y1="31" x2="18" y2="31" stroke="rgba(0,0,0,0.08)" strokeWidth="1"/>
+                          </svg>
+                          {/* Filename */}
+                          <span style={{
+                            fontSize: 10, fontFamily: "var(--mono)", color: "var(--gray-600)",
+                            maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center",
+                          }}>{file.name.replace(/\.pdf$/i, "")}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}>Click to add more</p>
                   </div>
                 ) : (
                   <div style={{ textAlign: "center" }}>
