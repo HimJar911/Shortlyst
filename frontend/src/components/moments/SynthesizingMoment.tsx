@@ -62,7 +62,7 @@ export default function SynthesizingMoment() {
           opacity: 0,
         }}
       >
-        Ranking candidates by verified signal
+        Ranking candidates
       </p>
     </div>
   );

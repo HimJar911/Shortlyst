@@ -53,19 +53,6 @@ export default function ParsingMoment() {
         ))}
       </div>
 
-      {/* Subtext */}
-      <p
-        style={{
-          marginTop: 24,
-          fontFamily: "var(--mono)",
-          fontSize: 13,
-          color: "var(--gray-500)",
-          letterSpacing: "0.02em",
-          fontWeight: 400,
-        }}
-      >
-        Reading multiple resumes simultaneously
-      </p>
     </div>
   );
 }

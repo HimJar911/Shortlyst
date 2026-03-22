@@ -103,23 +103,6 @@ export default function SkillVerdictsMoment() {
           {verdict.word}
         </div>
 
-        {/* Supporting subtext */}
-        <p
-          key={`${idx}-sub`}
-          style={{
-            marginTop: 20,
-            fontFamily: "var(--mono)",
-            fontSize: 12,
-            color: "var(--gray-500)",
-            letterSpacing: "0.015em",
-            animation: "svm-word-in 0.3s ease forwards",
-            animationDelay: "0.1s",
-            opacity: 0,
-            maxWidth: 400,
-          }}
-        >
-          {verdict.subtext}
-        </p>
       </div>
     </div>
   );

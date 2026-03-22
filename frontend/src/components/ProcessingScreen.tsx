@@ -32,15 +32,15 @@ const ResumesToDiamondsDynamic = dynamic(
 const ConveyorMoment: ComponentType = () => <ResumesToDiamondsDynamic height={340} />;
 
 // ─── Fixed rotation order ─────────────────────────────────────────────────────
-// 1. Conveyor  2. Parsing  3. ReadingCode  4. VisitingLinks
-// 5. Conveyor  6. SkillVerdicts  7. Synthesizing  8. MeritLine
+// 1. Parsing  2. Conveyor  3. ReadingCode  4. VisitingLinks
+// 5. SkillVerdicts  6. Conveyor  7. Synthesizing  8. MeritLine
 const MOMENTS: ComponentType[] = [
-  ConveyorMoment,
   ParsingMoment,
+  ConveyorMoment,
   ReadingCodeMoment,
   VisitingLinksMoment,
-  ConveyorMoment,
   SkillVerdictsMoment,
+  ConveyorMoment,
   SynthesizingMoment,
   MeritLineMoment,
 ];
