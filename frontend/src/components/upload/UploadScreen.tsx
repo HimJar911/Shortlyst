@@ -2,17 +2,15 @@
 
 import { useState } from "react";
 import { glass } from "@/lib/styles";
+import { submitAnalysis } from "@/lib/api";
+import type { FilterSettings } from "@/lib/api";
+import { useJobStore } from "@/store/jobStore";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface FilterSettings {
-  requireGithub: boolean;
-  requireLinkedin: boolean;
-  strictMatch: boolean;
-}
+// Re-export so callers that imported FilterSettings from here keep working.
+export type { FilterSettings };
 
 interface UploadScreenProps {
-  onStart: (filters: FilterSettings) => void;
+  onStart: () => void;
 }
 
 // ─── Strict-match placeholder skills ─────────────────────────────────────────
@@ -78,7 +76,7 @@ function Toggle({ label, description, value, onChange }: ToggleProps) {
 
 export default function UploadScreen({ onStart }: UploadScreenProps) {
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [resumeFiles, setResumeFiles] = useState<{ name: string }[]>([]);
+  const [resumeFiles, setResumeFiles] = useState<File[]>([]);
   const [jdText, setJdText] = useState("");
   const [dragOverJd, setDragOverJd] = useState(false);
   const [dragOverResumes, setDragOverResumes] = useState(false);
@@ -89,11 +87,17 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
   const [requireLinkedin, setRequireLinkedin] = useState(false);
   const [strictMatch, setStrictMatch] = useState(false);
 
+  // Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   // Button hover state
   const [btnHovered, setBtnHovered] = useState(false);
   const [btnPressed, setBtnPressed] = useState(false);
 
-  const canStart = !!(( jdFile || jdText.trim()) && resumeFiles.length > 0);
+  const store = useJobStore();
+
+  const canStart = !!(( jdFile || jdText.trim()) && resumeFiles.length > 0) && !isSubmitting;
 
   const dropZoneStyle = (active: boolean) => ({
     height: 220, borderRadius: 12, display: "flex", flexDirection: "column" as const,
@@ -159,9 +163,22 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
     };
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!canStart) return;
-    onStart({ requireGithub, requireLinkedin, strictMatch });
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const jd = inputMode === "paste" ? jdText.trim() : jdFile!;
+      const jobId = await submitAnalysis(jd, resumeFiles, { requireGithub, requireLinkedin, strictMatch });
+      store.reset();
+      store.setJobId(jobId);
+      store.setStatus("queued");
+      store.setPhase1Total(resumeFiles.length);
+      onStart();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -331,12 +348,18 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
               onMouseLeave={() => { setBtnHovered(false); setBtnPressed(false); }}
               onMouseDown={() => canStart && setBtnPressed(true)}
               onMouseUp={() => setBtnPressed(false)}
+              disabled={isSubmitting}
               style={btnStyle()}
             >
-              Analyze Candidates
+              {isSubmitting ? "Submitting…" : "Analyze Candidates"}
             </button>
-            <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 12, fontWeight: 300 }}>
-              {canStart ? "Ready — resumes will be processed in parallel" : "Upload both inputs to continue"}
+            {submitError && (
+              <p style={{ fontSize: 12, color: "#c0392b", marginTop: 8, fontWeight: 400 }}>
+                {submitError}
+              </p>
+            )}
+            <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8, fontWeight: 300 }}>
+              {isSubmitting ? "Uploading files…" : canStart ? "Ready — resumes will be processed in parallel" : "Upload both inputs to continue"}
             </p>
           </div>
 

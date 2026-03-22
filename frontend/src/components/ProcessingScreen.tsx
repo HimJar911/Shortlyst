@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, ComponentType } from "react";
 import dynamic from "next/dynamic";
 import ProgressBar from "./ui/ProgressBar";
 import { glass } from "@/lib/styles";
+import { streamJob, fetchResults, ApiError } from "@/lib/api";
+import { useJobStore } from "@/store/jobStore";
+import type { PhaseProgress } from "@/store/jobStore";
 
 import ParsingMoment       from "./moments/ParsingMoment";
 import ReadingCodeMoment   from "./moments/ReadingCodeMoment";
@@ -42,24 +45,19 @@ const MOMENTS: ComponentType[] = [
   MeritLineMoment,
 ];
 
-// ─── Status log data ──────────────────────────────────────────────────────────
+// ─── Progress helper ──────────────────────────────────────────────────────────
 
-// Delays spread across ~110 seconds so progress fills naturally over 2 minutes
-const lines = [
-  { text: "Parsing 12 resumes...",                                              delay:  2_000 },
-  { text: "Extracting skills, URLs, and experience from all documents",         delay:  6_000 },
-  { text: "Phase 1 — Hard filter running on 12 candidates",                    delay: 12_000 },
-  { text: "7 candidates eliminated — missing hard requirements",                delay: 22_000 },
-  { text: "5 candidates advancing to Phase 2",                                  delay: 28_000 },
-  { text: "Phase 2 — Deep verification started",                                delay: 35_000 },
-  { text: "GitHub API: Fetching repos, commits, and contribution graphs",       delay: 48_000 },
-  { text: "Playwright: Loading 11 URLs in headless browsers",                   delay: 60_000 },
-  { text: "Reading source files from top repositories",                         delay: 72_000 },
-  { text: "Cross-referencing claimed skills against verified evidence",         delay: 85_000 },
-  { text: "Code quality assessment complete",                                   delay: 96_000 },
-  { text: "Phase 3 — Ranking by verified signal",                               delay: 106_000 },
-  { text: "Final shortlist ready — 5 candidates ranked",                        delay: 116_000 },
-];
+function computeProgress(pp: PhaseProgress): number {
+  const { phase1, phase2, phase3 } = pp;
+  const p1 = phase1.total > 0
+    ? Math.min((phase1.complete + phase1.eliminated) / phase1.total, 1)
+    : 0;
+  const p2 = phase2.total > 0
+    ? Math.min(phase2.complete / phase2.total, 1)
+    : 0;
+  const p3 = phase3.complete;
+  return Math.round(p1 * 33 + p2 * 33 + p3 * 34);
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -69,26 +67,156 @@ interface ProcessingScreenProps {
 
 export default function ProcessingScreen({ onComplete }: ProcessingScreenProps) {
   const [phase, setPhase] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [statusLines, setStatusLines] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    lines.forEach((line, i) => {
-      setTimeout(() => {
-        setStatusLines((prev) => [...prev, line.text]);
-        setProgress(((i + 1) / lines.length) * 100);
-        if (i < 5) setPhase(1);
-        else if (i < 11) setPhase(2);
-        else setPhase(3);
-      }, line.delay);
-    });
-    setTimeout(onComplete, 120_000); // 2 minutes — matches the full visual rotation cycle
-  }, [onComplete]);
+  // Keep onComplete stable inside the SSE effect closure.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
+  const jobId        = useJobStore((s) => s.jobId);
+  const logLines     = useJobStore((s) => s.logLines);
+  const phaseProgress = useJobStore((s) => s.phaseProgress);
+  const {
+    setStatus,
+    setPhase2Total,
+    incrementPhase1Complete,
+    incrementPhase1Eliminated,
+    incrementPhase2Complete,
+    markPhase3Complete,
+    appendLogLine,
+    setResults,
+  } = useJobStore.getState();
+
+  const progress = computeProgress(phaseProgress);
+
+  // Auto-scroll log to bottom on new entries.
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [statusLines]);
+  }, [logLines]);
+
+  // ── SSE + polling fallback ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!jobId) return;
+
+    let completed = false;
+    let pollingInterval: ReturnType<typeof setInterval> | null = null;
+
+    const handleComplete = () => {
+      if (completed) return;
+      completed = true;
+      if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+      markPhase3Complete();
+      setStatus("complete");
+      onCompleteRef.current();
+    };
+
+    const startPolling = () => {
+      if (pollingInterval || completed) return;
+      pollingInterval = setInterval(async () => {
+        try {
+          const results = await fetchResults(jobId);
+          setResults(results);
+          handleComplete();
+        } catch (err) {
+          // 202 = job still running — keep polling.
+          if (err instanceof ApiError && err.status === 202) return;
+          // Other errors (404, 500): stop polling but don't transition.
+          if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+          appendLogLine(`Polling error: ${err instanceof Error ? err.message : "unknown"}`);
+        }
+      }, 4_000);
+    };
+
+    const closeSSE = streamJob(jobId, {
+
+      onPhaseStart: (data) => {
+        const num = data.phase === "phase1" ? 1 : data.phase === "phase2" ? 2 : 3;
+        setPhase(num);
+        setStatus(data.phase);
+        if (data.phase === "phase2" && data.total != null) setPhase2Total(data.total);
+        appendLogLine(data.message);
+      },
+
+      onJdParsed: (data) => {
+        const skills = data.required_skills.slice(0, 5).join(", ");
+        appendLogLine(
+          `JD parsed — role: ${data.role_title ?? "unknown"}${skills ? ` · skills: ${skills}` : ""}`
+        );
+      },
+
+      onCandidatePassedPhase1: (data) => {
+        incrementPhase1Complete();
+        appendLogLine(`✓ ${data.name ?? data.file_name} — passed phase 1`);
+      },
+
+      onCandidateEliminated: (data) => {
+        incrementPhase1Eliminated();
+        appendLogLine(`✗ ${data.file_name} — eliminated (${data.reason})`);
+      },
+
+      onPhaseComplete: (data) => {
+        if (data.phase === "phase1") {
+          appendLogLine(`Phase 1 complete — ${data.passed ?? 0} passed, ${data.eliminated ?? 0} eliminated`);
+        } else if (data.phase === "phase2") {
+          appendLogLine(`Phase 2 complete — ${data.verified ?? 0} verified`);
+        } else if (data.phase === "phase3") {
+          appendLogLine("Phase 3 complete — ranking finalised");
+        }
+      },
+
+      onPhase2CandidateStart: (data) => {
+        appendLogLine(`Verifying ${data.name}…`);
+      },
+
+      onPhase2CandidateComplete: (data) => {
+        incrementPhase2Complete();
+        const notes = [data.github_quality, data.deployment_signal].filter(Boolean).join(", ");
+        appendLogLine(`✓ ${data.name} verified${notes ? ` — ${notes}` : ""}`);
+      },
+
+      onPhase2CandidateError: (data) => {
+        // Count errors as complete so progress doesn't stall.
+        incrementPhase2Complete();
+        appendLogLine(`⚠ ${data.name} — verification error: ${data.error}`);
+      },
+
+      onComplete: (data) => {
+        const n = data.total_ranked;
+        appendLogLine(
+          `Analysis complete — ${n} candidate${n !== 1 ? "s" : ""} ranked` +
+          (data.top_candidate ? ` · top: ${data.top_candidate}` : "")
+        );
+        // Fetch results independently of the transition so the results screen
+        // has data ready when it mounts.
+        fetchResults(jobId)
+          .then((results) => setResults(results))
+          .catch(() => {/* results screen can re-fetch if null */})
+          .finally(() => handleComplete());
+      },
+
+      onError: (data) => {
+        appendLogLine(`Pipeline error: ${data.message}`);
+        setStatus("failed");
+      },
+
+      // SSE stream closed by server — if completion hasn't been signalled yet,
+      // fall back to polling so we don't leave the user stuck.
+      onStreamEnd: () => {
+        if (!completed) startPolling();
+      },
+
+      // Network drop: start polling immediately.
+      onConnectionError: () => {
+        appendLogLine("Connection interrupted — polling for results…");
+        startPolling();
+      },
+    });
+
+    return () => {
+      closeSSE();
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -132,7 +260,7 @@ export default function ProcessingScreen({ onComplete }: ProcessingScreenProps) 
             </p>
           </div>
 
-          {/* ── Visual rotation system ── */}
+          {/* ── Visual rotation system — untouched ── */}
           <VisualRotator moments={MOMENTS} intervalMs={8000} fadeDurationMs={800} />
 
           {/* Phase indicators */}
@@ -197,14 +325,14 @@ export default function ProcessingScreen({ onComplete }: ProcessingScreenProps) 
               ...glass.surface,
             }}
           >
-            {statusLines.map((line, i) => (
+            {logLines.map((line, i) => (
               <div
-                key={i}
+                key={line.id}
                 style={{
                   fontFamily: "var(--mono)",
                   fontSize: 12,
                   color:
-                    i === statusLines.length - 1
+                    i === logLines.length - 1
                       ? "var(--black)"
                       : "var(--gray-500)",
                   marginBottom: 6,
@@ -218,10 +346,10 @@ export default function ProcessingScreen({ onComplete }: ProcessingScreenProps) 
                 >
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                {line}
+                {line.text}
               </div>
             ))}
-            {statusLines.length < lines.length && (
+            {progress < 100 && (
               <span
                 style={{
                   fontFamily: "var(--mono)",
