@@ -52,7 +52,7 @@ async def run_phase3_pipeline(
         "complete",
         {
             "total_ranked": len(rankings),
-            "top_candidate": rankings[0]["name"] if rankings else None,
+            "top_candidate": rankings[0]["candidate"]["name"] if rankings else None,
         },
     )
 

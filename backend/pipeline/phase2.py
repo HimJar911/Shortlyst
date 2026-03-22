@@ -50,8 +50,13 @@ async def run_phase2_for_candidate(
         )
 
         # Code analysis uses github signal
+        # Verify only JD skills — pass any_of group separately for correct slot counting
+        required_any_of = jd_requirements.get("required_skills_any_of", [])
         code_analysis = await run_code_analysis(
-            github_signal, claimed_skills, required_skills
+            github_signal=github_signal,
+            claimed_skills=claimed_skills,
+            required_skills=required_skills,
+            required_any_of=required_any_of,
         )
 
         verified = {
@@ -62,6 +67,9 @@ async def run_phase2_for_candidate(
             "github_signal": github_signal,
             "deployment_signal": deployment_signal,
             "verified_skills": code_analysis.get("skill_verdicts", []),
+            "required_verdicts": code_analysis.get("required_verdicts", []),
+            "any_of_verdicts": code_analysis.get("any_of_verdicts", []),
+            "any_of_satisfied": code_analysis.get("any_of_satisfied", False),
             "experience_years": candidate_info.get("total_experience_years")
             or candidate_info.get("years_experience"),
             "education": candidate_info.get("education", []),

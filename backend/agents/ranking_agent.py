@@ -140,7 +140,8 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
         result = await call_llm_json(system_prompt, user_prompt, max_tokens=2000)
         rankings = result.get("rankings", [])
 
-        # Map back to candidate data and validate
+        # Map back to candidate data — wrap in {rank, candidate, ...} shape
+        # matching the Pydantic RankedCandidate model the frontend expects
         final_rankings = []
         for r in rankings:
             idx = r.get("candidate_index", 0)
@@ -149,9 +150,6 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
             candidate = verified_candidates[idx]
             final_rankings.append(
                 {
-                    "resume_index": candidate.get("resume_index", idx),
-                    "file_name": candidate.get("file_name", ""),
-                    "name": candidate.get("name"),
                     "rank": r.get("rank", idx + 1),
                     "overall_score": r.get("overall_score", 5.0),
                     "score_breakdown": r.get("score_breakdown", {}),
@@ -159,6 +157,21 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
                     "rank_reasoning": r.get("rank_reasoning", ""),
                     "key_strengths": r.get("key_strengths", []),
                     "key_concerns": r.get("key_concerns", []),
+                    "candidate": {
+                        "resume_index": candidate.get("resume_index", idx),
+                        "file_name": candidate.get("file_name", ""),
+                        "name": candidate.get("name"),
+                        "email": candidate.get("email"),
+                        "github_signal": candidate.get("github_signal", {}),
+                        "deployment_signal": candidate.get("deployment_signal", {}),
+                        "verified_skills": candidate.get("verified_skills", []),
+                        "required_verdicts": candidate.get("required_verdicts", []),
+                        "any_of_verdicts": candidate.get("any_of_verdicts", []),
+                        "any_of_satisfied": candidate.get("any_of_satisfied", False),
+                        "experience_years": candidate.get("experience_years"),
+                        "education": candidate.get("education", []),
+                        "candidate_info": candidate.get("candidate_info", {}),
+                    },
                 }
             )
 
@@ -169,12 +182,9 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
 
     except Exception as e:
         logger.error(f"Ranking failed: {e}")
-        # Fallback — return candidates in original order
+        # Fallback — return candidates in original order, wrapped in correct shape
         return [
             {
-                "resume_index": c.get("resume_index", i),
-                "file_name": c.get("file_name", ""),
-                "name": c.get("name"),
                 "rank": i + 1,
                 "overall_score": 5.0,
                 "score_breakdown": {},
@@ -182,6 +192,18 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
                 "rank_reasoning": "Ranking failed — manual review required",
                 "key_strengths": [],
                 "key_concerns": [],
+                "candidate": {
+                    "resume_index": c.get("resume_index", i),
+                    "file_name": c.get("file_name", ""),
+                    "name": c.get("name"),
+                    "email": c.get("email"),
+                    "github_signal": c.get("github_signal", {}),
+                    "deployment_signal": c.get("deployment_signal", {}),
+                    "verified_skills": c.get("verified_skills", []),
+                    "experience_years": c.get("experience_years"),
+                    "education": c.get("education", []),
+                    "candidate_info": c.get("candidate_info", {}),
+                },
             }
             for i, c in enumerate(verified_candidates)
         ]
