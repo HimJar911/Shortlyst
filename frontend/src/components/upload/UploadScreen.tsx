@@ -238,11 +238,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "var(--sans)" }}>
 
-      <style>{`
-        .filter-toggles-row { display: flex; flex-direction: row; }
-        @media (max-width: 768px) { .filter-toggles-row { flex-direction: column; } }
-        .strict-match-panel { overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; }
-      `}</style>
+      <style>{``}</style>
 
       {/* Header — logo only, no button */}
       <header style={{
@@ -330,7 +326,7 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             <div>
               {/* height+lineHeight match the JD flex row height so both cards start at the same Y */}
               <label style={{ display: "block", fontSize: 12, fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-700)", fontWeight: 600, marginBottom: 12, height: 24, lineHeight: "24px" }}>
-                Resumes {resumeFiles.length > 0 && `· ${resumeFiles.length} ${resumeFiles.length === 1 ? "file" : "files"} selected`}
+                Resumes {resumeFiles.length > 0 && `- ${resumeFiles.length} ${resumeFiles.length === 1 ? "file" : "files"} selected`}
               </label>
 
               <div
@@ -404,37 +400,50 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
             </div>
           </div>
 
-          {/* ── Filter toggles ─────────────────────────────────────────────── */}
-          <div style={{ marginTop: 32, marginBottom: 32 }}>
-            <div className="filter-toggles-row" style={{ gap: 16 }}>
-              <Toggle label="Require GitHub"   description="Reject candidates with no GitHub link"  value={requireGithub}   onChange={setRequireGithub} />
-              <Toggle label="Strict Match"     description="Must meet every hard requirement"        value={strictMatch}     onChange={setStrictMatch} />
-            </div>
+          {/* ── Filter toggle ──────────────────────────────────────────────── */}
+          <div style={{ marginTop: 32, marginBottom: 32, display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                minWidth: 200,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+                padding: "14px 28px",
+                borderRadius: 9999,
+                cursor: "pointer",
+                userSelect: "none",
+                background: "linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.18) 100%)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                border: "1px solid rgba(255,255,255,0.4)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.5)",
+                transition: "box-shadow 0.2s, border 0.2s",
+              }}
+              onClick={() => setRequireGithub(!requireGithub)}
+            >
+              <div style={{ textAlign: "center", flex: 1 }}>
+                <div style={{ fontSize: 13, fontFamily: "var(--sans)", fontWeight: 500, color: "var(--black)", marginBottom: 3 }}>
+                  Require GitHub
+                </div>
+                <div style={{ fontSize: 11, fontFamily: "var(--sans)", fontWeight: 300, color: "rgba(0,0,0,0.7)", lineHeight: 1.4 }}>
+                  Reject candidates with no GitHub link
+                </div>
+              </div>
 
-            {/* Strict Match expansion */}
-            <div className="strict-match-panel" style={{ maxHeight: strictMatch ? 120 : 0, opacity: strictMatch ? 1 : 0 }}>
-              <div style={{ marginTop: 10, padding: "16px 20px", borderRadius: 10, ...glass.surface, border: "1px solid rgba(255,255,255,0.5)" }}>
-                <div style={{ fontSize: 10, fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--gray-400)", marginBottom: 12 }}>
-                  Required Skills
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {extractedSkills.length > 0 ? (
-                    extractedSkills.map(skill => (
-                      <span key={skill} style={{
-                        padding: "4px 12px", borderRadius: 6, fontFamily: "var(--mono)", fontSize: 11,
-                        color: "var(--gray-700)", background: "rgba(255,255,255,0.6)",
-                        border: "1px solid rgba(0,0,0,0.08)",
-                        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-                      }}>
-                        {skill}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: 11, fontFamily: "var(--sans)", color: "var(--gray-400)", fontStyle: "italic" }}>
-                      Paste a job description to see requirements
-                    </span>
-                  )}
-                </div>
+              {/* Track */}
+              <div style={{
+                flexShrink: 0, width: 44, height: 24, borderRadius: 12,
+                background: requireGithub ? "#1a1a1a" : "rgba(0,0,0,0.1)",
+                position: "relative", transition: "background 0.2s ease",
+              }}>
+                {/* Knob */}
+                <div style={{
+                  position: "absolute", top: 2, left: requireGithub ? 22 : 2,
+                  width: 20, height: 20, borderRadius: "50%", background: "#ffffff",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06)",
+                  transition: "left 0.2s ease",
+                }} />
               </div>
             </div>
           </div>
