@@ -13,7 +13,41 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def verify_all_jd_skills(
+import re
+
+
+# SQL variants — if any of these appear in a README, any SQL-related skill is confirmed
+_SQL_VARIANTS = {"sql", "mysql", "postgresql", "postgres", "sqlite", "mssql", "mariadb", "oracle", "supabase", "prisma"}
+_SQL_SKILLS = {"sql", "mysql", "postgresql", "postgres", "sqlite", "nosql", "database", "mssql", "mariadb"}
+
+# Short skill names that match common English words — require case-sensitive matching
+_CASE_SENSITIVE_SKILLS = {"go", "c", "r", "rust", "dart", "swift", "helm", "chef", "flask", "puppet"}
+
+
+def _skill_mentioned(skill: str, text: str) -> bool:
+    """Keyword match with word boundaries. Case-sensitive for short/ambiguous names."""
+    escaped = re.escape(skill)
+    if skill.lower() in _CASE_SENSITIVE_SKILLS:
+        pattern = re.compile(
+            r"(?:^|[^a-zA-Z0-9])(" + escaped + r")(?=[^a-zA-Z0-9]|$)",
+        )
+    else:
+        pattern = re.compile(
+            r"(?:^|[^a-zA-Z0-9])(" + escaped + r")(?=[^a-zA-Z0-9]|$)",
+            re.IGNORECASE,
+        )
+    return bool(pattern.search(text))
+
+
+def _check_sql_family(skill: str, text: str) -> bool:
+    """If the skill is SQL-related, check for any SQL variant in the text."""
+    if skill.lower() in _SQL_SKILLS:
+        text_lower = text.lower()
+        return any(_skill_mentioned(variant, text) for variant in _SQL_VARIANTS)
+    return False
+
+
+def verify_all_jd_skills(
     source_files: dict,
     readme_text: str,
     required_skills: list[str],
@@ -21,133 +55,29 @@ async def verify_all_jd_skills(
     preferred_skills: list[str],
 ) -> dict:
     """
-    Single LLM call that verifies ALL JD skills (required + any_of + preferred)
-    against code + README evidence.
+    Simple keyword matching — checks if each skill is mentioned in any README.
+    No LLM call needed.
     """
-    all_jd_skills = list(set(required_skills + required_any_of + preferred_skills))
+    all_readme = readme_text or ""
 
-    if not all_jd_skills:
-        return {
-            "required": [],
-            "any_of": [],
-            "preferred": [],
-            "any_of_satisfied": False,
-        }
+    def _check(skill: str) -> dict:
+        if _skill_mentioned(skill, all_readme):
+            return {"skill": skill, "status": "confirmed", "evidence": "Found in GitHub"}
+        if _check_sql_family(skill, all_readme):
+            return {"skill": skill, "status": "confirmed", "evidence": "SQL variant found in GitHub"}
+        return {"skill": skill, "status": "unverified", "evidence": "Not found in GitHub"}
 
-    has_code = bool(source_files)
-    has_readme = bool(readme_text and readme_text.strip())
+    required_verdicts = [_check(s) for s in required_skills]
+    any_of_verdicts = [_check(s) for s in required_any_of]
+    preferred_verdicts = [_check(s) for s in preferred_skills]
+    any_of_satisfied = any(v["status"] == "confirmed" for v in any_of_verdicts)
 
-    if not has_code and not has_readme:
-        empty = [
-            {
-                "skill": s,
-                "status": "unverified",
-                "evidence": "No source code or README available",
-            }
-            for s in all_jd_skills
-        ]
-        verdict_map = {e["skill"]: e for e in empty}
-        return {
-            "required": [verdict_map[s] for s in required_skills if s in verdict_map],
-            "any_of": [verdict_map[s] for s in required_any_of if s in verdict_map],
-            "preferred": [verdict_map[s] for s in preferred_skills if s in verdict_map],
-            "any_of_satisfied": False,
-        }
-
-    files_text = ""
-    if has_code:
-        for filename, content in source_files.items():
-            files_text += f"\n--- {filename} ---\n{content[:1500]}\n"
-
-    system_prompt = """You are verifying whether a candidate's GitHub repositories demonstrate the skills a job requires.
-Evidence sources:
-1. Source code — confirms the skill is actively used
-2. README files — confirms the skill is part of their documented tech stack
-
-Both are valid. README mention of a technology counts as confirmation.
-Be specific about where you saw evidence."""
-
-    user_prompt = f"""Verify these job-required skills against the candidate's GitHub evidence.
-
-REQUIRED SKILLS (candidate needs ALL):
-{required_skills}
-
-ANY-OF SKILLS (candidate needs AT LEAST ONE):
-{required_any_of}
-
-PREFERRED SKILLS (nice to have):
-{preferred_skills}
-
-README CONTENT FROM ALL REPOS:
-{readme_text[:3000] if has_readme else "No README available"}
-
-SOURCE CODE FILES:
-{files_text[:4000] if has_code else "No source files available"}
-
-IMPORTANT: If a programming language appears in source code files or README, count it as confirmed.
-If a skill like TypeScript, Python, Java etc appears as a file extension (.ts, .py, .java) in filenames
-shown above, that confirms the candidate uses that language.
-
-For each skill return:
-- confirmed: used in code OR mentioned in README as part of tech stack
-- unverified: no evidence found (not a red flag, may exist in other repos)
-- flagged: claimed but evidence shows only superficial or misunderstood usage
-
-Return JSON:
-{{
-    "verdicts": [
-        {{
-            "skill": "exact skill name from the lists above",
-            "status": "confirmed/unverified/flagged",
-            "evidence": "one sentence — what you saw and where"
-        }}
-    ]
-}}
-
-Include EVERY skill from ALL three lists. README mentions count as confirmation."""
-
-    try:
-        result = await call_llm_json(system_prompt, user_prompt, max_tokens=2000)
-        verdicts = result.get("verdicts", [])
-
-        verdict_map = {v["skill"]: v for v in verdicts}
-
-        # Fallback for any skills the LLM missed
-        for s in all_jd_skills:
-            if s not in verdict_map:
-                verdict_map[s] = {
-                    "skill": s,
-                    "status": "unverified",
-                    "evidence": "Not assessed",
-                }
-
-        required_verdicts = [
-            verdict_map[s] for s in required_skills if s in verdict_map
-        ]
-        any_of_verdicts = [verdict_map[s] for s in required_any_of if s in verdict_map]
-        preferred_verdicts = [verdict_map[s] for s in preferred_skills if s in verdict_map]
-        any_of_satisfied = any(v["status"] == "confirmed" for v in any_of_verdicts)
-
-        return {
-            "required": required_verdicts,
-            "any_of": any_of_verdicts,
-            "preferred": preferred_verdicts,
-            "any_of_satisfied": any_of_satisfied,
-        }
-
-    except Exception as e:
-        logger.error(f"JD skill verification failed: {e}")
-        empty = [
-            {"skill": s, "status": "unverified", "evidence": "Analysis failed"}
-            for s in all_jd_skills
-        ]
-        verdict_map = {e["skill"]: e for e in empty}
-        return {
-            "required": [verdict_map[s] for s in required_skills if s in verdict_map],
-            "any_of": [verdict_map[s] for s in required_any_of if s in verdict_map],
-            "preferred": [verdict_map[s] for s in preferred_skills if s in verdict_map],
-            "any_of_satisfied": False,
-        }
+    return {
+        "required": required_verdicts,
+        "any_of": any_of_verdicts,
+        "preferred": preferred_verdicts,
+        "any_of_satisfied": any_of_satisfied,
+    }
 
 
 # Skills that can't be verified from code/README — filter these out
@@ -276,7 +206,7 @@ async def run_code_analysis(
     readme_sections = []
     for repo_name, readme in cached_readmes.items():
         if readme and readme.strip():
-            readme_sections.append(f"=== {repo_name} README ===\n{readme[:800]}")
+            readme_sections.append(f"=== {repo_name} README ===\n{readme[:3000]}")
     combined_readme = "\n\n".join(readme_sections)
 
     # Add languages found by GitHub API as extra README context
@@ -292,9 +222,12 @@ async def run_code_analysis(
         f"languages: {languages_found}, "
         f"{len(required_skills)} required + {len(required_any_of)} any-of + {len(preferred_skills)} preferred skills"
     )
+    logger.debug(
+        f"README content for skill matching ({username}):\n{combined_readme[:3000]}"
+    )
 
-    # Single LLM call for all skill categories
-    result = await verify_all_jd_skills(
+    # Simple keyword matching against READMEs
+    result = verify_all_jd_skills(
         source_files=all_source_files,
         readme_text=combined_readme,
         required_skills=required_skills,
@@ -310,6 +243,10 @@ async def run_code_analysis(
     confirmed_slots = len(confirmed)
 
     summary = f"{confirmed_slots}/{total_slots} JD skills verified"
+    logger.info(
+        f"Skill verdicts for {username}: "
+        + ", ".join(f"{v['skill']}={'✓' if v['status'] == 'confirmed' else '✗'}" for v in all_verdicts)
+    )
 
     return {
         "skill_verdicts": all_verdicts,
