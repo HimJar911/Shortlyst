@@ -107,12 +107,20 @@ function buildInsights(ranked: ApiRankedCandidate): Insight[] {
   const { candidate, recommendation } = ranked;
   const signal = candidate.github_signal as any;
 
-  // MISMATCH FIX: overall_code_quality is a string, not code_quality.summary
-  const codeQualityText: string =
-    signal?.code_quality?.summary ??
-    (signal?.overall_code_quality
-      ? `Overall code quality: ${signal.overall_code_quality}`
-      : "No code quality data available.");
+  const qualityLabel: string = signal?.overall_code_quality ?? "";
+  const capitalizedQuality = qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1);
+  const repoCount = signal?.repo_analyses?.length ?? 0;
+  const complexities: string[] = (signal?.repo_analyses ?? [])
+    .map((r: any) => r?.code_quality?.complexity ?? r?.assessment?.overall_complexity ?? "")
+    .filter(Boolean);
+  const mostCommonComplexity = complexities.length > 0
+    ? complexities.sort((a: string, b: string) =>
+        complexities.filter((v: string) => v === b).length - complexities.filter((v: string) => v === a).length
+      )[0]
+    : "";
+  const codeQualityText: string = capitalizedQuality
+    ? `${capitalizedQuality}${repoCount ? ` — ${repoCount} repos analyzed` : ""}${mostCommonComplexity ? `, ${mostCommonComplexity} complexity` : ""}.`
+    : "No code quality data available.";
 
   const requiredV: any[] = (candidate as any).required_verdicts ?? [];
   const anyOfV: any[] = (candidate as any).any_of_verdicts ?? [];
@@ -129,20 +137,26 @@ function buildInsights(ranked: ApiRankedCandidate): Insight[] {
   const totalSlots = dedupedV.length;
 
   const jdText: string =
+    (ranked as any).jd_alignment ??
+    (candidate as any).jd_alignment ??
     (candidate as any).jd_match_reasoning ??
     (totalSlots > 0
       ? `${confirmedSlots}/${totalSlots} JD skills verified.`
       : "No JD skill verification data.");
 
   // MISMATCH FIX: commit_quality_score lives at signal.commit_quality.score
-  const commitScore =
-    signal?.commit_quality?.score ??
-    signal?.commit_quality_score ??
-    0;
-  const consistency = signal?.contribution_consistency;
-  const commitText: string = consistency
-    ? `${consistency}. Commit quality: ${commitScore}/1.0`
-    : `Commit quality score: ${commitScore}`;
+  const commitCount = signal?.commit_quality?.commit_count ?? 0;
+  const consistency: string = signal?.contribution_consistency ?? "";
+  const consistencyLabel = consistency === "active"
+    ? "Active contributor"
+    : consistency === "moderate"
+    ? "Moderate activity"
+    : consistency === "sparse"
+    ? "Sparse activity"
+    : "";
+  const commitText: string = consistencyLabel
+    ? `${consistencyLabel}. ${commitCount} commits in last 6 months.`
+    : `${commitCount} commits in last 6 months.`;
 
   const overallText: string =
     (ranked as any).rank_reasoning ??

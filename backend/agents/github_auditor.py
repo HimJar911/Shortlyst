@@ -301,6 +301,7 @@ async def analyze_github_profile(
         "burst_detected": False,  # no longer penalized
         "commit_quality": {
             "score": 0.5,
+            "commit_count": len(all_commits),
             "assessment": f"{len(all_commits)} commits across top repos — treated as soft signal only",
             "is_lazy": False,
             "burst_detected": False,

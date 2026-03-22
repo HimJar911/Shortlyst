@@ -74,6 +74,7 @@ async def rank_candidates(
                 "score_breakdown": {"github_signal": 7.0, "deployment_signal": 5.0, "skills_match": 7.0},
                 "recommendation": "Only qualified candidate — review manually",
                 "rank_reasoning": "Sole survivor of Phase 1 and Phase 2 filters",
+                "jd_alignment": "Only candidate — manual alignment review recommended",
                 "key_strengths": [],
                 "key_concerns": [],
                 "candidate": {
@@ -136,6 +137,7 @@ Return JSON:
                 "skills_match": 8.0
             }},
             "rank_reasoning": "2-3 sentences explaining exactly why this rank — be specific about what code you saw",
+            "jd_alignment": "One concise sentence on how well this candidate fits the specific role based on all verified evidence",
             "recommendation": "Strong hire / Hire / Maybe / Pass",
             "key_strengths": ["up to 3 specific verified strengths"],
             "key_concerns": ["up to 2 specific concerns based on evidence"]
@@ -171,6 +173,7 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
                     "score_breakdown": r.get("score_breakdown", {}),
                     "recommendation": r.get("recommendation", "Maybe"),
                     "rank_reasoning": r.get("rank_reasoning", ""),
+                    "jd_alignment": r.get("jd_alignment", ""),
                     "key_strengths": r.get("key_strengths", []),
                     "key_concerns": r.get("key_concerns", []),
                     "candidate": {
