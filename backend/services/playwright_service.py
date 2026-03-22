@@ -206,6 +206,23 @@ def should_skip_url(url: str) -> bool:
         "stackoverflow.com",
         "docs.",
         "documentation.",
+        # Competitive programming profiles — never real deployed apps
+        "leetcode.com",
+        "codeforces.com",
+        "codechef.com",
+        "hackerrank.com",
+        "codolio.com",
+        "topcoder.com",
+        "atcoder.jp",
+        "geeksforgeeks.org",
+        # File storage — not apps
+        "drive.google.com",
+        "dropbox.com",
+        "onedrive.live.com",
+        # Academic / document URLs
+        "bitmesra.ac.in",
+        "academia.edu",
+        "researchgate.net",
     ]
     return any(d in url.lower() for d in skip_domains)
 

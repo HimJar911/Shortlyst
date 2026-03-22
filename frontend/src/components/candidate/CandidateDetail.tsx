@@ -8,8 +8,10 @@ import SkillBadge from "@/components/ui/SkillBadge";
 import InsightCard from "@/components/ui/InsightCard";
 
 export default function CandidateDetail({ candidate }: { candidate: Candidate }) {
+  // Flat skill counting — all JD skills equal weight
   const confirmed = candidate.skills.filter(s => s.status === "confirmed").length;
   const total = candidate.skills.length;
+
   const liveCount = candidate.deployments.filter(d => d.status === "live").length;
 
   return (
@@ -33,7 +35,7 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
         </p>
         <div style={{ display: "flex", justifyContent: "center", gap: 48 }}>
           {[
-            { label: "Skills Confirmed", value: `${confirmed}/${total}` },
+            { label: "Skills Confirmed", value: total > 0 ? `${confirmed}/${total}` : "—" },
             { label: "Live Deployments", value: liveCount },
             { label: "GitHub", value: candidate.github.activity },
             { label: "Repos", value: candidate.github.repos },
@@ -57,9 +59,15 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
       {/* Skills */}
       <div style={{ marginBottom: 40 }}>
         <SectionLabel>Skills Verification</SectionLabel>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {candidate.skills.map(s => <SkillBadge key={s.name} skill={s} />)}
-        </div>
+        {candidate.skills.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--gray-400)", fontStyle: "italic" }}>
+            No JD skills to verify — job description did not specify required technical skills.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {candidate.skills.map(s => <SkillBadge key={s.name} skill={s} />)}
+          </div>
+        )}
         <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 12, fontWeight: 300, fontStyle: "italic" }}>Hover over any skill for verification details</p>
       </div>
 

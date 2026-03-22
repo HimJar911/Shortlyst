@@ -2,6 +2,7 @@ export interface Skill {
   name: string;
   status: "confirmed" | "unverified" | "flagged";
   detail: string;
+  isAnyOf?: boolean;
 }
 
 export interface Deployment {

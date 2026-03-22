@@ -167,6 +167,7 @@ Include ALL {len(verified_candidates)} candidates in rankings array, ordered ran
                         "verified_skills": candidate.get("verified_skills", []),
                         "required_verdicts": candidate.get("required_verdicts", []),
                         "any_of_verdicts": candidate.get("any_of_verdicts", []),
+                        "preferred_verdicts": candidate.get("preferred_verdicts", []),
                         "any_of_satisfied": candidate.get("any_of_satisfied", False),
                         "experience_years": candidate.get("experience_years"),
                         "education": candidate.get("education", []),

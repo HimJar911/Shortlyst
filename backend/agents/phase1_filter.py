@@ -18,27 +18,21 @@ JOB DESCRIPTION:
 Return this exact JSON structure:
 {{
     "required_skills": ["skills where candidate needs ALL of them — short names only e.g. 'Python', 'SQL'"],
-    "required_skills_any_of": ["skills where candidate needs AT LEAST ONE — when JD says 'such as', 'including', 'like', 'or', 'one of'"],
-    "preferred_skills": ["nice to have skills — short names only"],
+    "required_skills_any_of": ["skills where candidate needs AT LEAST ONE"],
+    "preferred_skills": ["nice to have skills"],
     "min_years_experience": null or number,
     "education_required": null or "Bachelor's" or "Master's" or "PhD" or "Any degree",
     "requires_github": true or false,
     "role_level": "intern" or "junior" or "mid" or "senior" or "lead",
     "role_title": "exact role title from JD",
     "key_responsibilities": ["top 3 main things this person will do"]
-}}
-
-Critical rules:
-- NEVER put full sentences in any skills list — short skill names only
-- required_skills: candidate must have ALL of these
-- required_skills_any_of: candidate needs just ONE — use when JD says 'such as Java, Python, or C++'
-- For 'Java, Python, C++, C#, Go, Rust, or TypeScript' → put ALL in required_skills_any_of
-- Only put skills in required_skills if truly mandatory — when in doubt use preferred_skills
-- requires_github is true only if JD explicitly asks for a GitHub profile link"""
+}}"""
 
     try:
         result = await call_llm_json(system_prompt, user_prompt, max_tokens=1000)
-        logger.info(f"JD requirements extracted: {result.get('role_title')} | required skills: {result.get('required_skills')}")
+        logger.info(
+            f"JD extracted: {result.get('role_title')} | required: {result.get('required_skills')}"
+        )
         return result
     except Exception as e:
         logger.error(f"Failed to extract JD requirements: {e}")
@@ -68,36 +62,16 @@ Return this exact JSON structure:
 {{
     "name": "full name or null",
     "current_title": "current or most recent job title or null",
-    "skills": ["all technical skills, languages, frameworks, tools mentioned anywhere on resume including coursework"],
+    "skills": ["all technical skills, languages, frameworks, tools mentioned anywhere including coursework"],
     "years_experience": null or number,
-    "education": [
-        {{
-            "degree": "Bachelor's/Master's/PhD/Associate's or null",
-            "field": "field of study or null",
-            "institution": "university name or null",
-            "graduation_year": null or number
-        }}
-    ],
-    "projects": [
-        {{
-            "name": "project name",
-            "description": "one line description",
-            "technologies": ["tech used"]
-        }}
-    ],
+    "education": [{{"degree": "Bachelor's/Master's/PhD/Associate's or null", "field": "field or null", "institution": "university or null", "graduation_year": null or number, "gpa": "GPA as string e.g. '3.5' or null if not mentioned"}}],
+    "projects": [{{"name": "project name", "description": "one line", "technologies": ["tech used"]}}],
     "has_degree": true or false,
     "total_experience_years": null or number
-}}
-
-Rules:
-- For skills: include everything technical from ALL sections — skills section, coursework, experience, projects
-- Include coursework topics as skills e.g. 'Data Structures & Algorithms' → add 'data structures', 'algorithms'
-- For years_experience: calculate from work history dates if possible
-- Be thorough — scan the entire resume"""
+}}"""
 
     try:
-        result = await call_llm_json(system_prompt, user_prompt, max_tokens=1500)
-        return result
+        return await call_llm_json(system_prompt, user_prompt, max_tokens=1500)
     except Exception as e:
         logger.error(f"Failed to extract candidate info from {file_name}: {e}")
         return {
@@ -113,9 +87,7 @@ Rules:
 
 
 async def check_skills_match(
-    required_skills: list[str],
-    required_any: list[str],
-    raw_resume_text: str,
+    required_skills: list[str], required_any: list[str], raw_resume_text: str
 ) -> list[dict]:
     if not required_skills and not required_any:
         return []
@@ -135,23 +107,13 @@ RESUME TEXT:
 {raw_resume_text[:3000]}
 
 Return JSON:
-{{
-    "failures": [
-        {{
-            "skill": "skill name",
-            "reason": "why it was not found",
-            "type": "required_all or required_any"
-        }}
-    ]
-}}
+{{"failures": [{{"skill": "skill name", "reason": "why not found", "type": "required_all or required_any"}}]}}
 
 Rules:
-- 'data structures' is satisfied by 'Data Structures & Algorithms' coursework
-- 'algorithms' is satisfied by 'Data Structures & Algorithms' coursework
-- 'OOP' is satisfied by 'object-oriented', 'OOP', 'Java', 'C++', 'Python'
-- 'version control' is satisfied by 'Git', 'GitHub'
-- For required_any: only fail if NONE of the listed skills are found anywhere
-- Be reasonable — look at the full context, not just the skills section
+- 'data structures' satisfied by 'Data Structures & Algorithms' coursework
+- 'OOP' satisfied by Java, C++, Python
+- 'version control' satisfied by Git/GitHub
+- For required_any: only fail if NONE of the listed skills are found
 - Return empty failures array if everything is satisfied"""
 
     try:
@@ -162,9 +124,7 @@ Rules:
 
 
 async def check_hard_requirements(
-    candidate_info: dict,
-    jd_requirements: dict,
-    mechanical: dict,
+    candidate_info: dict, jd_requirements: dict, mechanical: dict
 ) -> list[dict]:
     failures = []
 
@@ -174,10 +134,7 @@ async def check_hard_requirements(
         raw_resume_text=mechanical.get("raw_text", ""),
     )
     for f in skill_failures:
-        failures.append({
-            "check": "required_skill",
-            "reason": f["reason"],
-        })
+        failures.append({"check": "required_skill", "reason": f["reason"]})
 
     min_years = jd_requirements.get("min_years_experience")
     if min_years:
@@ -187,35 +144,34 @@ async def check_hard_requirements(
             or 0
         )
         if candidate_years < min_years:
-            failures.append({
-                "check": "experience",
-                "reason": f"JD requires {min_years}+ years, candidate has ~{candidate_years} years",
-            })
+            failures.append(
+                {
+                    "check": "experience",
+                    "reason": f"JD requires {min_years}+ years, candidate has ~{candidate_years} years",
+                }
+            )
 
     education_required = jd_requirements.get("education_required")
     if education_required and education_required.lower() not in ("any", "none", "null"):
-        has_degree = candidate_info.get("has_degree", False)
-        if not has_degree:
-            failures.append({
-                "check": "education",
-                "reason": f"JD requires {education_required}, no degree found on resume",
-            })
+        if not candidate_info.get("has_degree", False):
+            failures.append(
+                {
+                    "check": "education",
+                    "reason": f"JD requires {education_required}, no degree found",
+                }
+            )
 
-    requires_github = jd_requirements.get("requires_github", False)
-    if requires_github and not mechanical.get("github_url"):
-        failures.append({
-            "check": "github",
-            "reason": "No GitHub profile linked",
-        })
+    if jd_requirements.get("requires_github", False) and not mechanical.get(
+        "github_url"
+    ):
+        failures.append(
+            {"check": "github", "reason": "JD requires GitHub profile, none found"}
+        )
 
     return failures
 
 
-async def run_phase1(
-    file_path: str,
-    resume_index: int,
-    jd_requirements: dict,
-) -> dict:
+async def run_phase1(file_path: str, resume_index: int, jd_requirements: dict) -> dict:
     mechanical = parse_resume_mechanical(file_path, resume_index)
 
     if not mechanical["raw_text"].strip():
@@ -223,22 +179,23 @@ async def run_phase1(
             "resume_index": resume_index,
             "file_name": mechanical["file_name"],
             "passed": False,
-            "reason": "Could not extract text from PDF — may be scanned or image-based",
+            "reason": "Could not extract text from PDF",
             "candidate_info": None,
             "mechanical": mechanical,
         }
 
     candidate_info = await extract_candidate_info(
-        mechanical["raw_text"],
-        mechanical["file_name"],
+        mechanical["raw_text"], mechanical["file_name"]
+    )
+    failures = await check_hard_requirements(
+        candidate_info, jd_requirements, mechanical
     )
 
-    failures = await check_hard_requirements(candidate_info, jd_requirements, mechanical)
-
     if failures:
-        primary_reason = failures[0]["reason"]
         all_reasons = " | ".join(f["reason"] for f in failures)
-        logger.info(f"Phase 1 ELIMINATED [{mechanical['file_name']}]: {primary_reason}")
+        logger.info(
+            f"Phase 1 ELIMINATED [{mechanical['file_name']}]: {failures[0]['reason']}"
+        )
         return {
             "resume_index": resume_index,
             "file_name": mechanical["file_name"],
@@ -248,7 +205,9 @@ async def run_phase1(
             "mechanical": mechanical,
         }
 
-    logger.info(f"Phase 1 PASSED [{mechanical['file_name']}]: {candidate_info.get('name')}")
+    logger.info(
+        f"Phase 1 PASSED [{mechanical['file_name']}]: {candidate_info.get('name')}"
+    )
     return {
         "resume_index": resume_index,
         "file_name": mechanical["file_name"],
@@ -260,18 +219,14 @@ async def run_phase1(
 
 
 async def run_phase1_batch(
-    file_paths: list[str],
-    jd_requirements: dict,
+    file_paths: list[str], jd_requirements: dict
 ) -> tuple[list[dict], list[dict]]:
     tasks = [
         run_phase1(file_path, i, jd_requirements)
         for i, file_path in enumerate(file_paths)
     ]
-
     results = await asyncio.gather(*tasks)
-
     passed = [r for r in results if r["passed"]]
     eliminated = [r for r in results if not r["passed"]]
-
     logger.info(f"Phase 1 complete: {len(passed)} passed, {len(eliminated)} eliminated")
     return passed, eliminated

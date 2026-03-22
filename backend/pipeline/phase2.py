@@ -49,14 +49,17 @@ async def run_phase2_for_candidate(
             verify_deployments(all_urls),
         )
 
-        # Code analysis uses github signal
-        # Verify only JD skills — pass any_of group separately for correct slot counting
-        required_any_of = jd_requirements.get("required_skills_any_of", [])
+        # Code analysis — pass required and any_of SEPARATELY to avoid duplication
+        # required_skills here is the merged list (used for github audit scoring)
+        # but code_analysis needs them separate for correct slot counting
+        jd_required_only = jd_requirements.get("required_skills", [])
+        jd_any_of = jd_requirements.get("required_skills_any_of", [])
         code_analysis = await run_code_analysis(
             github_signal=github_signal,
             claimed_skills=claimed_skills,
-            required_skills=required_skills,
-            required_any_of=required_any_of,
+            required_skills=jd_required_only,
+            required_any_of=jd_any_of,
+            preferred_skills=preferred_skills,
         )
 
         verified = {
@@ -69,6 +72,7 @@ async def run_phase2_for_candidate(
             "verified_skills": code_analysis.get("skill_verdicts", []),
             "required_verdicts": code_analysis.get("required_verdicts", []),
             "any_of_verdicts": code_analysis.get("any_of_verdicts", []),
+            "preferred_verdicts": code_analysis.get("preferred_verdicts", []),
             "any_of_satisfied": code_analysis.get("any_of_satisfied", False),
             "experience_years": candidate_info.get("total_experience_years")
             or candidate_info.get("years_experience"),

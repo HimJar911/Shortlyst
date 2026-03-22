@@ -116,16 +116,22 @@ function buildInsights(ranked: ApiRankedCandidate): Insight[] {
 
   const requiredV: any[] = (candidate as any).required_verdicts ?? [];
   const anyOfV: any[] = (candidate as any).any_of_verdicts ?? [];
-  const anyOfSatisfied: boolean = (candidate as any).any_of_satisfied ?? false;
-
-  const confirmedRequired = requiredV.filter((s: any) => s.status === "confirmed").length;
-  const totalSlots = requiredV.length + (anyOfV.length > 0 ? 1 : 0);
-  const confirmedSlots = confirmedRequired + (anyOfSatisfied ? 1 : 0);
+  const preferredV: any[] = (candidate as any).preferred_verdicts ?? [];
+  const allV = [...requiredV, ...anyOfV, ...preferredV];
+  // Dedup by skill name
+  const seen = new Set<string>();
+  const dedupedV = allV.filter((v: any) => {
+    if (seen.has(v.skill ?? v.name)) return false;
+    seen.add(v.skill ?? v.name);
+    return true;
+  });
+  const confirmedSlots = dedupedV.filter((s: any) => s.status === "confirmed").length;
+  const totalSlots = dedupedV.length;
 
   const jdText: string =
     (candidate as any).jd_match_reasoning ??
     (totalSlots > 0
-      ? `${confirmedSlots}/${totalSlots} JD requirements verified.`
+      ? `${confirmedSlots}/${totalSlots} JD skills verified.`
       : "No JD skill verification data.");
 
   // MISMATCH FIX: commit_quality_score lives at signal.commit_quality.score
@@ -208,6 +214,7 @@ function mapRankedCandidate(ranked: ApiRankedCandidate): Candidate {
   // Education and experience from phase2 propagation
   const education = (candidate as any).education ?? [];
   const school = education[0]?.institution ?? "";
+  const gpa = education[0]?.gpa ?? "";
   const experienceYears = (candidate as any).experience_years;
   const experience = experienceYears != null ? `${experienceYears} years` : "";
 
@@ -216,36 +223,37 @@ function mapRankedCandidate(ranked: ApiRankedCandidate): Candidate {
     rank,
     name: candidate.name ?? candidate.file_name.replace(/\.pdf$/i, ""),
     school,
-    gpa: "",       // not extracted by backend
+    gpa: gpa,
     experience,
     score: displayScore,
     github: mapGitHub(signal ?? {}),
-    // Only show JD skills — required + any_of group
-    // If structured verdicts exist use them, otherwise fall back to flat list
+    // All JD skills flat — required + any_of + preferred, all equal weight, deduped
     skills: (() => {
       const requiredV: any[] = (candidate as any).required_verdicts ?? [];
       const anyOfV: any[] = (candidate as any).any_of_verdicts ?? [];
-      const anyOfSatisfied: boolean = (candidate as any).any_of_satisfied ?? false;
+      const preferredV: any[] = (candidate as any).preferred_verdicts ?? [];
+      const allStructured = [...requiredV, ...anyOfV, ...preferredV];
 
-      if (requiredV.length > 0 || anyOfV.length > 0) {
-        // Required skills — each is its own slot
-        const requiredSkills: Skill[] = requiredV.map(mapSkill);
-
-        // Any-of group — show all options but only confirmed one(s) are black
-        // They all share the same slot in the counter
-        const anyOfSkills: Skill[] = anyOfV.map((v: any) => ({
-          ...mapSkill(v),
-          // Mark non-confirmed any-of skills as unverified even if they were confirmed
-          // so the UI shows only the matched one as black
-          status: v.status === "confirmed" ? "confirmed" : "unverified",
-          isAnyOf: true,
-        } as any));
-
-        return [...requiredSkills, ...anyOfSkills];
+      if (allStructured.length > 0) {
+        const seen = new Set<string>();
+        return allStructured
+          .map(mapSkill)
+          .filter((s: Skill) => {
+            if (seen.has(s.name)) return false;
+            seen.add(s.name);
+            return true;
+          });
       }
 
-      // Fallback — flat verified_skills list
-      return (candidate.verified_skills ?? []).map(mapSkill);
+      // Fallback — flat verified_skills list, deduped
+      const seen = new Set<string>();
+      return (candidate.verified_skills ?? [])
+        .map(mapSkill)
+        .filter((s: Skill) => {
+          if (seen.has(s.name)) return false;
+          seen.add(s.name);
+          return true;
+        });
     })(),
     deployments,
     commitStyle: deriveCommitStyle(signal ?? {}),

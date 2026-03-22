@@ -65,6 +65,7 @@ Evidence sources:
 Both are valid. README mention of a technology counts as confirmation.
 Be specific about where you saw evidence."""
 
+    # Build languages summary from github_signal for extra context
     user_prompt = f"""Verify these job-required skills against the candidate's GitHub evidence.
 
 REQUIRED SKILLS (candidate needs ALL):
@@ -78,6 +79,10 @@ README CONTENT FROM ALL REPOS:
 
 SOURCE CODE FILES:
 {files_text[:4000] if has_code else "No source files available"}
+
+IMPORTANT: If a programming language appears in source code files or README, count it as confirmed.
+If a skill like TypeScript, Python, Java etc appears as a file extension (.ts, .py, .java) in filenames
+shown above, that confirms the candidate uses that language.
 
 For each skill return:
 - confirmed: used in code OR mentioned in README as part of tech stack
@@ -137,19 +142,55 @@ Include every skill from both lists. README mentions count as confirmation."""
         }
 
 
+# Skills that can't be verified from code/README — filter these out
+NON_VERIFIABLE_SKILLS = {
+    "debugging",
+    "problem-solving",
+    "communication",
+    "teamwork",
+    "agile",
+    "scrum",
+    "agile/scrum",
+    "sdlc",
+    "software development lifecycle",
+    "code reviews",
+    "open-source",
+    "open source",
+    "version control",
+    "leadership",
+    "mentoring",
+    "written communication",
+    "verbal communication",
+    "analytical skills",
+    "critical thinking",
+    "time management",
+    "collaboration",
+    "attention to detail",
+    "ai tools",
+    "ai tools for development productivity",
+}
+
+
 async def run_code_analysis(
     github_signal: dict,
     claimed_skills: list[str],  # kept for signature compat, not used
     required_skills: list[str],
     required_any_of: list[str] = None,
+    preferred_skills: list[str] = None,
 ) -> dict:
     """
     Verifies JD skills against source code + READMEs from all repos.
-    claimed_skills param kept for backward compatibility but ignored —
-    we only check what the JD asks for.
+    Checks required, any_of, and preferred skills — filters non-verifiable ones.
     """
     if required_any_of is None:
         required_any_of = []
+    if preferred_skills is None:
+        preferred_skills = []
+
+    # Filter preferred skills — only keep technical ones
+    preferred_skills = [
+        s for s in preferred_skills if s.lower().strip() not in NON_VERIFIABLE_SKILLS
+    ]
 
     if not github_signal or not github_signal.get("exists"):
         return {
@@ -208,12 +249,30 @@ async def run_code_analysis(
             readme_sections.append(f"=== {repo_name} README ===\n{readme[:800]}")
     combined_readme = "\n\n".join(readme_sections)
 
+    # Add languages found by GitHub API as extra README context
+    languages_found = github_signal.get("languages_found", [])
+    if languages_found:
+        lang_note = f"\n\n=== GitHub Language Stats ===\nLanguages detected across repos: {', '.join(languages_found)}"
+        combined_readme = combined_readme + lang_note
+
     logger.info(
         f"JD skill verification for {username}: "
         f"{len(all_source_files)} source files, "
         f"{len(cached_readmes)} READMEs, "
+        f"languages: {languages_found}, "
         f"{len(required_skills)} required + {len(required_any_of)} any-of skills"
     )
+
+    # Verify preferred skills too (already filtered to technical ones)
+    preferred_verdicts = []
+    if preferred_skills:
+        preferred_result = await verify_jd_skills(
+            source_files=all_source_files,
+            readme_text=combined_readme,
+            required_skills=preferred_skills,
+            required_any_of=[],
+        )
+        preferred_verdicts = preferred_result["required"]
 
     result = await verify_jd_skills(
         source_files=all_source_files,
@@ -222,21 +281,20 @@ async def run_code_analysis(
         required_any_of=required_any_of,
     )
 
-    # Flatten for backward compat — pipeline phase2 stores skill_verdicts
-    all_verdicts = result["required"] + result["any_of"]
+    # Flatten all verdicts — required + any_of + preferred, all treated equally
+    all_verdicts = result["required"] + result["any_of"] + preferred_verdicts
     confirmed = [v for v in all_verdicts if v["status"] == "confirmed"]
 
-    total_slots = len(required_skills) + (1 if required_any_of else 0)
-    confirmed_slots = len([v for v in result["required"] if v["status"] == "confirmed"])
-    if result["any_of_satisfied"]:
-        confirmed_slots += 1
+    total_slots = len(required_skills) + len(required_any_of) + len(preferred_verdicts)
+    confirmed_slots = len(confirmed)
 
-    summary = f"{confirmed_slots}/{total_slots} JD requirements verified"
+    summary = f"{confirmed_slots}/{total_slots} JD skills verified"
 
     return {
-        "skill_verdicts": all_verdicts,  # flat list for storage
+        "skill_verdicts": all_verdicts,
         "required_verdicts": result["required"],
         "any_of_verdicts": result["any_of"],
+        "preferred_verdicts": preferred_verdicts,
         "any_of_satisfied": result["any_of_satisfied"],
         "summary": summary,
     }

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     PHASE1_TIMEOUT_SECONDS: int = 10
     PHASE2_TIMEOUT_SECONDS: int = 120
     PLAYWRIGHT_PAGE_TIMEOUT: int = 15000  # milliseconds
-    PLAYWRIGHT_NAVIGATION_TIMEOUT: int = 15000  # milliseconds
+    PLAYWRIGHT_NAVIGATION_TIMEOUT: int = 30000  # milliseconds
     GITHUB_REQUEST_TIMEOUT: int = 10
     CLAUDE_TIMEOUT: int = 60
 
@@ -72,5 +72,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-
-

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import httpx
 from typing import Optional
 from config import settings
@@ -14,26 +15,63 @@ HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
+# Semaphore to cap concurrent GitHub API requests
+# Prevents secondary rate limit (burst) from triggering
+_github_semaphore: Optional[asyncio.Semaphore] = None
 
-async def get(client: httpx.AsyncClient, url: str) -> Optional[dict | list]:
-    try:
-        response = await client.get(
-            url, headers=HEADERS, timeout=settings.GITHUB_REQUEST_TIMEOUT
-        )
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 404:
-            logger.warning(f"GitHub 404: {url}")
-            return None
-        elif response.status_code == 403:
-            logger.warning(f"GitHub rate limited: {url}")
-            return None
-        else:
-            logger.warning(f"GitHub {response.status_code}: {url}")
-            return None
-    except Exception as e:
-        logger.error(f"GitHub request failed {url}: {e}")
-        return None
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _github_semaphore
+    if _github_semaphore is None:
+        _github_semaphore = asyncio.Semaphore(10)
+    return _github_semaphore
+
+
+async def get(
+    client: httpx.AsyncClient, url: str, retries: int = 3
+) -> Optional[dict | list]:
+    async with _get_semaphore():
+        for attempt in range(retries):
+            try:
+                response = await client.get(
+                    url, headers=HEADERS, timeout=settings.GITHUB_REQUEST_TIMEOUT
+                )
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 404:
+                    logger.warning(f"GitHub 404: {url}")
+                    return None
+                elif response.status_code == 403:
+                    # Check for secondary rate limit vs auth error
+                    retry_after = response.headers.get("Retry-After")
+                    x_ratelimit_remaining = response.headers.get(
+                        "X-RateLimit-Remaining", "?"
+                    )
+                    if retry_after:
+                        wait = int(retry_after) + 1
+                        logger.warning(
+                            f"GitHub 403 rate limited (Retry-After={retry_after}s), waiting {wait}s: {url}"
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+                    else:
+                        logger.warning(
+                            f"GitHub 403 (remaining={x_ratelimit_remaining}): {url}"
+                        )
+                        if attempt < retries - 1:
+                            await asyncio.sleep(2**attempt)
+                            continue
+                        return None
+                else:
+                    logger.warning(f"GitHub {response.status_code}: {url}")
+                    return None
+            except Exception as e:
+                logger.error(f"GitHub request failed {url}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return None
+    return None
 
 
 async def get_user(username: str) -> Optional[dict]:
@@ -93,8 +131,6 @@ async def get_file_content(
         encoding = data.get("encoding")
         content = data.get("content", "")
         if encoding == "base64":
-            import base64
-
             try:
                 return base64.b64decode(content).decode("utf-8", errors="ignore")
             except Exception:
@@ -102,7 +138,30 @@ async def get_file_content(
         return content
 
 
-async def get_readme(username: str, repo_name: str) -> Optional[str]:
+async def get_readme(
+    username: str, repo_name: str, contents: Optional[list] = None
+) -> Optional[str]:
+    """
+    Fetch README efficiently.
+    If contents listing is provided, check it first to avoid waterfall of 4 requests.
+    Falls back to sequential check if contents not available.
+    """
+    # If we already have the contents listing, check which README exists
+    if contents:
+        content_names = {
+            f.get("name", "").lower(): f.get("name")
+            for f in contents
+            if f.get("type") == "file"
+        }
+        for readme_name in ["README.md", "readme.md", "README.rst", "README"]:
+            if readme_name.lower() in content_names:
+                actual_name = content_names[readme_name.lower()]
+                result = await get_file_content(username, repo_name, actual_name)
+                if result:
+                    return result[:3000]
+        return None
+
+    # Fallback: sequential check
     for readme_name in ["README.md", "readme.md", "README.rst", "README"]:
         content = await get_file_content(username, repo_name, readme_name)
         if content:
@@ -162,12 +221,16 @@ async def fetch_full_repo_data(
 ) -> dict:
     repo_name = repo["name"]
 
-    commits, languages, readme, contents = await asyncio.gather(
+    # Fetch commits, languages, and contents in parallel
+    # README fetched after contents so we can use the listing to avoid waterfall
+    commits, languages, contents = await asyncio.gather(
         get_commits(username, repo_name),
         get_repo_languages(username, repo_name),
-        get_readme(username, repo_name),
         get_repo_contents(username, repo_name),
     )
+
+    # Now fetch README using contents listing to avoid 4-call waterfall
+    readme = await get_readme(username, repo_name, contents=contents)
 
     commit_messages = []
     for c in commits[: settings.MAX_COMMITS_TO_FETCH]:
@@ -206,7 +269,6 @@ async def fetch_full_repo_data(
         )
 
         def is_useful_code_file(f: dict) -> bool:
-            """Skip empty files, __init__.py with no real content, and oversized files."""
             name = f.get("name", "")
             size = f.get("size", 0)
             if size == 0:
@@ -215,7 +277,6 @@ async def fetch_full_repo_data(
                 return False
             if not any(name.endswith(ext) for ext in interesting_extensions):
                 return False
-            # Skip tiny __init__.py — they're almost always just comments or empty
             if name == "__init__.py" and size < 100:
                 return False
             return True
@@ -225,8 +286,6 @@ async def fetch_full_repo_data(
 
         code_files = collect_code_files(contents)
 
-        # If no real code files at root, search subdirs up to 2 levels deep
-        # Keep collecting across multiple subdirs until we hit MAX_FILES limit
         if not code_files:
             common_src_dirs = ["src", "app", "backend", "api", "lib", "core"]
             for item in contents:
@@ -244,12 +303,10 @@ async def fetch_full_repo_data(
 
                 sub_code_files = collect_code_files(sub_contents)
 
-                # If nothing useful at this level, drill into its subdirs
                 if not sub_code_files:
                     logger.debug(
                         f"No useful files in {item['name']}/, drilling into subdirs..."
                     )
-                    # Fetch all subdirs in parallel
                     subdir_items = [s for s in sub_contents if s.get("type") == "dir"]
                     subdir_contents_list = await asyncio.gather(
                         *[
@@ -265,11 +322,9 @@ async def fetch_full_repo_data(
                             break
 
                 code_files.extend(sub_code_files)
-                # Don't break — keep going through common_src_dirs to gather more files
                 if len(code_files) >= settings.MAX_FILES_TO_READ_PER_REPO:
                     break
 
-        # Read up to MAX_FILES_TO_READ_PER_REPO, prioritize larger/more meaningful files
         code_files_sorted = sorted(
             code_files, key=lambda f: f.get("size", 0), reverse=True
         )
@@ -279,7 +334,7 @@ async def fetch_full_repo_data(
                 logger.debug(f"Reading: {file_path}")
                 content = await get_file_content(username, repo_name, file_path)
                 if content and len(content.strip()) > 50:
-                    source_files[f["name"]] = content[:3000]  # increased from 2000
+                    source_files[f["name"]] = content[:3000]
                 else:
                     logger.warning(
                         f"Skipped {file_path} — empty or no content returned"
