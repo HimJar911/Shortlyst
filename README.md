@@ -127,36 +127,6 @@ Ranked + eliminated candidates with scores and reasoning. `202` if processing, `
 
 `→ { "status": "ok" }`
 
-## Project Structure
-
-```
-backend/
-├── main.py                    # Entrypoint, lifespan, CORS
-├── config.py                  # Pydantic Settings
-├── agents/
-│   ├── phase1_filter.py       # JD parsing + hard filters
-│   ├── github_auditor.py      # Batched repo assessment
-│   ├── code_analyzer.py       # Regex skill verification
-│   ├── ranking_agent.py       # Final ranking
-│   └── deployment_verifier.py # Screenshot + vision
-├── pipeline/
-│   ├── orchestrator.py        # Phase coordinator
-│   ├── phase1.py → phase3.py  # Screening → verification → ranking
-├── services/
-│   ├── claude_client.py       # LLM abstraction (OpenAI/Anthropic)
-│   ├── redis_queue.py         # Job state + SSE
-│   ├── github_client.py       # GitHub API
-│   ├── pdf_parser.py          # PDF extraction
-│   ├── playwright_service.py  # Browser pool
-│   └── vision_service.py      # Vision analysis
-└── models/                    # Pydantic models
-
-frontend/src/
-├── components/                # Upload, processing, results views
-├── store/jobStore.ts          # Zustand state
-├── lib/api.ts                 # API client + SSE
-└── types/index.ts
-```
 
 ## Design Decisions
 
