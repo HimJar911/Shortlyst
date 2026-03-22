@@ -1,9 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useLayoutEffect, forwardRef } from "react";
 import { SkillLogos, DefaultSkillLogo } from "./SkillLogos";
 import StatusBadge from "./StatusBadge";
 import type { Skill } from "@/types";
+
+const TooltipCard = forwardRef<HTMLDivElement, { skill: Skill }>(function TooltipCard({ skill }, _ref) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState({ left: "50%", transform: "translateX(-50%)" });
+  const [arrowLeft, setArrowLeft] = useState("50%");
+
+  useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.left < 4) {
+      const shift = 4 - rect.left;
+      setOffset({ left: `calc(50% + ${shift}px)`, transform: "translateX(-50%)" });
+      setArrowLeft(`calc(50% - ${shift}px)`);
+    } else if (rect.right > window.innerWidth - 4) {
+      const shift = rect.right - window.innerWidth + 4;
+      setOffset({ left: `calc(50% - ${shift}px)`, transform: "translateX(-50%)" });
+      setArrowLeft(`calc(50% + ${shift}px)`);
+    }
+  }, []);
+
+  return (
+    <div ref={innerRef} style={{
+      position: "absolute", top: "calc(100% + 8px)", left: offset.left, transform: offset.transform,
+      padding: "10px 14px", borderRadius: 10, fontSize: 12, fontWeight: 300, lineHeight: 1.5,
+      width: 260, zIndex: 10, fontFamily: "var(--sans)",
+      background: "rgba(23,23,23,0.9)", color: "#fff",
+      backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+        <StatusBadge status={skill.status} size="xs" />
+      </div>
+      {skill.detail}
+      <div style={{
+        position: "absolute", top: -4, left: arrowLeft, transform: "translateX(-50%) rotate(45deg)",
+        width: 8, height: 8, background: "rgba(23,23,23,0.9)",
+      }} />
+    </div>
+  );
+});
 
 export default function SkillBadge({ skill }: { skill: Skill }) {
   const [hovered, setHovered] = useState(false);
@@ -30,23 +71,7 @@ export default function SkillBadge({ skill }: { skill: Skill }) {
         {isFlagged && <span style={{ fontSize: 12 }}>⚠</span>}
       </div>
       {hovered && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
-          padding: "10px 14px", borderRadius: 10, fontSize: 12, fontWeight: 300, lineHeight: 1.5,
-          width: 260, zIndex: 10, fontFamily: "var(--sans)",
-          background: "rgba(23,23,23,0.9)", color: "#fff",
-          backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-            <StatusBadge status={skill.status} size="xs" />
-          </div>
-          {skill.detail}
-          <div style={{
-            position: "absolute", top: -4, left: "50%", transform: "translateX(-50%) rotate(45deg)",
-            width: 8, height: 8, background: "rgba(23,23,23,0.9)",
-          }} />
-        </div>
+        <TooltipCard skill={skill} />
       )}
     </div>
   );

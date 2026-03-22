@@ -127,13 +127,7 @@ export default function CandidateDetail({ candidate }: { candidate: Candidate })
         </div>
       </div>
 
-      {/* Commit History */}
-      <div style={{ marginBottom: 40 }}>
-        <SectionLabel>Commit History</SectionLabel>
-        <div style={{ ...glass.surface, borderRadius: 10, padding: "16px 20px" }}>
-          <p style={{ fontSize: 14, color: "var(--gray-600)", fontWeight: 300, lineHeight: 1.65, fontStyle: "italic" }}>{candidate.commitStyle}</p>
-        </div>
-      </div>
+
     </div>
   );
 }

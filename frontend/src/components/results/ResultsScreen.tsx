@@ -102,7 +102,7 @@ export default function ResultsScreen() {
             <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", ...glass.pill }}>
               {[
                 { key: "ranked"    as const, label: `Ranked (${candidates.length})` },
-                { key: "eliminated" as const, label: `Cut (${eliminated.length})` },
+                { key: "eliminated" as const, label: `Eliminated (${eliminated.length})` },
               ].map(v => (
                 <button key={v.key} onClick={() => setSidebarView(v.key)} style={{
                   flex: 1, padding: "6px 8px", fontSize: 11, fontFamily: "var(--mono)",
