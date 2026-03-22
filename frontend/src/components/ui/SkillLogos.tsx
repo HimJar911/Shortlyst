@@ -274,6 +274,14 @@ export const SkillLogos: Record<string, () => ReactElement> = {
     </svg>
   ),
 
+  SQL: () => (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <ellipse cx="12" cy="7" rx="8" ry="4"/>
+      <path d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7"/>
+      <path d="M4 12c0 2.21 3.58 4 8 4s8-1.79 8-4"/>
+    </svg>
+  ),
+
   Redis: () => (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5">
       <polygon points="12,2 22,8 22,16 12,22 2,16 2,8" strokeLinejoin="round"/>
