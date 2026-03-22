@@ -1,0 +1,96 @@
+<svg width="100%" viewBox="0 0 680 720" xmlns="http://www.w3.org/2000/svg">
+<style>
+  text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .th { font-size: 14px; font-weight: 600; fill: white; }
+  .ts { font-size: 12px; font-weight: 400; fill: rgba(255,255,255,0.75); }
+  .arr { stroke: #888; stroke-width: 1.5; }
+  .leader { stroke: #666; stroke-width: 0.5; stroke-dasharray: 4 3; }
+</style>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<!-- Background -->
+<rect width="680" height="720" fill="#0d1117" rx="12"/>
+
+<!-- Frontend -->
+<rect x="80" y="30" width="520" height="100" rx="16" fill="#1a3a5c" stroke="#2d6aa0" stroke-width="0.5"/>
+<text class="th" x="340" y="58" text-anchor="middle" dominant-baseline="central">Frontend (Next.js)</text>
+<text class="ts" x="340" y="82" text-anchor="middle" dominant-baseline="central">UploadScreen → ProcessingScreen (SSE) → ResultsScreen</text>
+<text class="ts" x="340" y="100" text-anchor="middle" dominant-baseline="central">Zustand store</text>
+
+<!-- API labels -->
+<text class="ts" x="240" y="155" text-anchor="middle" fill="#aaa">POST /analyze</text>
+<text class="ts" x="240" y="171" text-anchor="middle" fill="#aaa">GET /jobs/:id/results</text>
+<text class="ts" x="460" y="163" text-anchor="middle" fill="#aaa">GET /jobs/:id/stream</text>
+
+<!-- Arrows frontend → backend -->
+<line x1="240" y1="130" x2="240" y2="210" class="arr" marker-end="url(#arrow)"/>
+<line x1="460" y1="130" x2="460" y2="210" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Backend container -->
+<rect x="50" y="210" width="580" height="340" rx="20" fill="#1e1a3a" stroke="#534AB7" stroke-width="0.5"/>
+<text class="th" x="340" y="240" text-anchor="middle" dominant-baseline="central">Backend (FastAPI)</text>
+
+<!-- Phase 1 -->
+<rect x="90" y="265" width="130" height="50" rx="8" fill="#0F6E56" stroke="#1D9E75" stroke-width="0.5"/>
+<text class="th" x="155" y="283" text-anchor="middle" dominant-baseline="central">Phase 1</text>
+<text class="ts" x="155" y="301" text-anchor="middle" dominant-baseline="central">Filter</text>
+
+<line x1="220" y1="290" x2="260" y2="290" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Phase 2 -->
+<rect x="262" y="265" width="130" height="50" rx="8" fill="#0F6E56" stroke="#1D9E75" stroke-width="0.5"/>
+<text class="th" x="327" y="283" text-anchor="middle" dominant-baseline="central">Phase 2</text>
+<text class="ts" x="327" y="301" text-anchor="middle" dominant-baseline="central">Verify</text>
+
+<line x1="392" y1="290" x2="432" y2="290" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Phase 3 -->
+<rect x="434" y="265" width="130" height="50" rx="8" fill="#0F6E56" stroke="#1D9E75" stroke-width="0.5"/>
+<text class="th" x="499" y="283" text-anchor="middle" dominant-baseline="central">Phase 3</text>
+<text class="ts" x="499" y="301" text-anchor="middle" dominant-baseline="central">Rank</text>
+
+<!-- LLM parse -->
+<rect x="80" y="360" width="150" height="50" rx="8" fill="#712B13" stroke="#D85A30" stroke-width="0.5"/>
+<text class="th" x="155" y="378" text-anchor="middle" dominant-baseline="central">LLM</text>
+<text class="ts" x="155" y="396" text-anchor="middle" dominant-baseline="central">Parse + check</text>
+<line x1="155" y1="315" x2="155" y2="358" class="arr" marker-end="url(#arrow)"/>
+
+<!-- GitHub Auditor -->
+<rect x="258" y="360" width="140" height="50" rx="8" fill="#712B13" stroke="#D85A30" stroke-width="0.5"/>
+<text class="th" x="328" y="378" text-anchor="middle" dominant-baseline="central">GitHub auditor</text>
+<text class="ts" x="328" y="396" text-anchor="middle" dominant-baseline="central">LLM batched</text>
+<line x1="300" y1="315" x2="300" y2="358" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Code Analyzer -->
+<rect x="258" y="430" width="140" height="50" rx="8" fill="#712B13" stroke="#D85A30" stroke-width="0.5"/>
+<text class="th" x="328" y="448" text-anchor="middle" dominant-baseline="central">Code analyzer</text>
+<text class="ts" x="328" y="466" text-anchor="middle" dominant-baseline="central">Keyword match</text>
+<line x1="355" y1="315" x2="355" y2="358" class="arr" marker-end="url(#arrow)"/>
+<line x1="355" y1="410" x2="355" y2="428" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Deploy Verifier -->
+<rect x="80" y="430" width="150" height="50" rx="8" fill="#712B13" stroke="#D85A30" stroke-width="0.5"/>
+<text class="th" x="155" y="448" text-anchor="middle" dominant-baseline="central">Deploy verifier</text>
+<text class="ts" x="155" y="466" text-anchor="middle" dominant-baseline="central">Playwright + vision</text>
+<line x1="155" y1="410" x2="155" y2="428" class="arr" marker-end="url(#arrow)"/>
+
+<!-- LLM rank -->
+<rect x="424" y="360" width="150" height="50" rx="8" fill="#712B13" stroke="#D85A30" stroke-width="0.5"/>
+<text class="th" x="499" y="378" text-anchor="middle" dominant-baseline="central">LLM</text>
+<text class="ts" x="499" y="396" text-anchor="middle" dominant-baseline="central">Rank all at once</text>
+<line x1="499" y1="315" x2="499" y2="358" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Arrow to Redis -->
+<line x1="340" y1="550" x2="340" y2="600" class="arr" marker-end="url(#arrow)"/>
+
+<!-- Redis -->
+<rect x="240" y="602" width="200" height="80" rx="12" fill="#633806" stroke="#BA7517" stroke-width="0.5"/>
+<text class="th" x="340" y="628" text-anchor="middle" dominant-baseline="central">Redis</text>
+<text class="ts" x="340" y="648" text-anchor="middle" dominant-baseline="central">Job state, results,</text>
+<text class="ts" x="340" y="664" text-anchor="middle" dominant-baseline="central">SSE queue</text>
+
+</svg>
