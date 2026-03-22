@@ -71,6 +71,11 @@ async def run_phase1_pipeline(
             {
                 "resume_index": result["resume_index"],
                 "file_name": result["file_name"],
+                "name": (
+                    result["candidate_info"].get("name")
+                    if result.get("candidate_info")
+                    else None
+                ),
                 "phase": 1,
                 "reason": result["reason"],
             },

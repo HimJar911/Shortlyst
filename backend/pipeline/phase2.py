@@ -62,6 +62,9 @@ async def run_phase2_for_candidate(
             "github_signal": github_signal,
             "deployment_signal": deployment_signal,
             "verified_skills": code_analysis.get("skill_verdicts", []),
+            "experience_years": candidate_info.get("total_experience_years")
+            or candidate_info.get("years_experience"),
+            "education": candidate_info.get("education", []),
             "candidate_info": candidate_info,
             "mechanical": mechanical,
         }
