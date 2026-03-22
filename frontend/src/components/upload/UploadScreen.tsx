@@ -12,6 +12,8 @@ export type { FilterSettings };
 
 interface UploadScreenProps {
   onStart: () => void;
+  hasResults?: boolean;
+  onCheckResults?: () => void;
 }
 
 // ─── Skill keyword extraction from JD text ──────────────────────────────────
@@ -120,7 +122,7 @@ function Toggle({ label, description, value, onChange }: ToggleProps) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function UploadScreen({ onStart }: UploadScreenProps) {
+export default function UploadScreen({ onStart, hasResults, onCheckResults }: UploadScreenProps) {
   const [jdFile, setJdFile] = useState<File | null>(null);
   const [resumeFiles, setResumeFiles] = useState<File[]>([]);
   const [jdText, setJdText] = useState("");
@@ -148,6 +150,10 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
   // Button hover state
   const [btnHovered, setBtnHovered] = useState(false);
   const [btnPressed, setBtnPressed] = useState(false);
+
+  // Nav button hover state (Check Results Again)
+  const [navBtnHovered, setNavBtnHovered] = useState(false);
+  const [navBtnPressed, setNavBtnPressed] = useState(false);
 
   const store = useJobStore();
 
@@ -242,13 +248,43 @@ export default function UploadScreen({ onStart }: UploadScreenProps) {
 
       {/* Header — logo only, no button */}
       <header style={{
-        padding: "24px 40px", display: "flex", alignItems: "center",
+        padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between",
         ...glass.header, position: "sticky", top: 0, zIndex: 10,
       }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
           <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)", letterSpacing: "-0.02em" }}>Shortlyst</span>
           <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--gray-400)", marginLeft: 8, textTransform: "uppercase", letterSpacing: "0.1em" }}>Recruitment Intelligence</span>
         </div>
+        {hasResults && onCheckResults && (
+          <button
+            onClick={onCheckResults}
+            onMouseEnter={() => setNavBtnHovered(true)}
+            onMouseLeave={() => { setNavBtnHovered(false); setNavBtnPressed(false); }}
+            onMouseDown={() => setNavBtnPressed(true)}
+            onMouseUp={() => setNavBtnPressed(false)}
+            style={{
+              padding: "10px 24px",
+              borderRadius: 9999,
+              fontFamily: "var(--sans)",
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+              border: "1px solid transparent",
+              cursor: "pointer",
+              transition: "background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease",
+              background: "#0a0a0a",
+              color: "#ffffff",
+              boxShadow: navBtnPressed
+                ? "0 2px 8px rgba(0,0,0,0.12)"
+                : navBtnHovered
+                  ? "0 4px 20px rgba(0,0,0,0.15)"
+                  : "0 2px 12px rgba(0,0,0,0.08)",
+              transform: navBtnHovered && !navBtnPressed ? "translateY(-2px)" : "translateY(0px)",
+            }}
+          >
+            Check Results Again
+          </button>
+        )}
       </header>
 
       <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
