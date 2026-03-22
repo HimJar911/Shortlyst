@@ -65,17 +65,33 @@ async def rank_candidates(
         return []
 
     if len(verified_candidates) == 1:
+        c = verified_candidates[0]
         logger.info("Only one candidate — auto-ranked #1")
         return [
             {
-                "resume_index": verified_candidates[0].get("resume_index", 0),
-                "file_name": verified_candidates[0].get("file_name", ""),
-                "name": verified_candidates[0].get("name"),
                 "rank": 1,
                 "overall_score": 7.0,
-                "score_breakdown": {"github": 7.0, "deployment": 5.0, "skills": 7.0},
+                "score_breakdown": {"github_signal": 7.0, "deployment_signal": 5.0, "skills_match": 7.0},
                 "recommendation": "Only qualified candidate — review manually",
                 "rank_reasoning": "Sole survivor of Phase 1 and Phase 2 filters",
+                "key_strengths": [],
+                "key_concerns": [],
+                "candidate": {
+                    "resume_index": c.get("resume_index", 0),
+                    "file_name": c.get("file_name", ""),
+                    "name": c.get("name"),
+                    "email": c.get("email"),
+                    "github_signal": c.get("github_signal", {}),
+                    "deployment_signal": c.get("deployment_signal", {}),
+                    "verified_skills": c.get("verified_skills", []),
+                    "required_verdicts": c.get("required_verdicts", []),
+                    "any_of_verdicts": c.get("any_of_verdicts", []),
+                    "preferred_verdicts": c.get("preferred_verdicts", []),
+                    "any_of_satisfied": c.get("any_of_satisfied", False),
+                    "experience_years": c.get("experience_years"),
+                    "education": c.get("education", []),
+                    "candidate_info": c.get("candidate_info", {}),
+                },
             }
         ]
 

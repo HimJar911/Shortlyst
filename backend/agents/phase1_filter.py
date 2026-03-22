@@ -9,7 +9,27 @@ logger = get_logger(__name__)
 
 async def extract_jd_requirements(jd_text: str) -> dict:
     system_prompt = """You are an expert technical recruiter analyzing a job description.
-Extract the requirements precisely. Be strict about what is truly REQUIRED vs merely preferred."""
+Extract the requirements precisely. Be strict about what is truly REQUIRED vs merely preferred.
+
+CRITICAL RULES FOR SKILLS:
+
+1. Only extract CONCRETE, named technologies — programming languages, frameworks, libraries, tools, and platforms with specific names.
+   GOOD: "Python", "TypeScript", "React", "PostgreSQL", "AWS", "Docker", "Redis", "Git", "Node.js", "TensorFlow"
+   BAD (never extract): "database systems", "version control systems", "cloud platforms", "troubleshooting", "open source projects", "data structures", "OOP", "problem solving", "communication skills", "agile methodologies"
+
+2. Break out grouped/parenthetical skills into individual concrete items:
+   "Database systems (SQL and NoSQL)" → extract "SQL" and "NoSQL" separately
+   "Cloud platforms (preferably AWS)" → extract "AWS"
+   "CI/CD tools (Jenkins, GitHub Actions)" → extract "Jenkins" and "GitHub Actions"
+   "version control" → extract "Git"
+
+3. CRITICAL — required_skills vs required_skills_any_of:
+   - If the JD says "experience with at least one of X, Y, Z" or "one or more of X, Y, Z" or "such as X, Y, Z" → put ALL of X, Y, Z into required_skills_any_of (NOT required_skills)
+   - required_skills = candidate must know EVERY SINGLE ONE. Only use this for skills the JD explicitly says are ALL required.
+   - required_skills_any_of = candidate needs at least ONE from this list. Use this when JD offers alternatives.
+   - Example: "Experience with Java, Python, C++, or Go" → required_skills_any_of: ["Java", "Python", "C++", "Go"]
+   - Example: "Must know React and TypeScript" → required_skills: ["React", "TypeScript"]
+   - When in doubt, put skills in required_skills_any_of rather than required_skills."""
 
     user_prompt = f"""Analyze this job description and extract requirements as JSON.
 
@@ -18,9 +38,9 @@ JOB DESCRIPTION:
 
 Return this exact JSON structure:
 {{
-    "required_skills": ["skills where candidate needs ALL of them — short names only e.g. 'Python', 'SQL'"],
-    "required_skills_any_of": ["skills where candidate needs AT LEAST ONE"],
-    "preferred_skills": ["nice to have skills"],
+    "required_skills": ["technologies the candidate MUST know ALL of — only when JD explicitly requires all"],
+    "required_skills_any_of": ["technologies where candidate needs AT LEAST ONE — use when JD says 'one of', 'such as', 'or', lists alternatives"],
+    "preferred_skills": ["concrete named nice-to-have technologies"],
     "min_years_experience": null or number,
     "education_required": null or "Bachelor's" or "Master's" or "PhD" or "Any degree",
     "requires_github": true or false,
@@ -35,7 +55,7 @@ Return this exact JSON structure:
             model=settings.LLM_MODEL_MINI,
         )
         logger.info(
-            f"JD extracted: {result.get('role_title')} | required: {result.get('required_skills')}"
+            f"JD extracted: {result.get('role_title')} | required_all: {result.get('required_skills')} | required_any_of: {result.get('required_skills_any_of')} | preferred: {result.get('preferred_skills')}"
         )
         return result
     except Exception as e:
@@ -126,8 +146,19 @@ async def check_hard_requirements(
 ) -> list[dict]:
     failures = []
 
-    for f in skill_failures:
+    # required_all failures: each one is a real failure
+    required_all_failures = [f for f in skill_failures if f.get("type") != "required_any"]
+    for f in required_all_failures:
         failures.append({"check": "required_skill", "reason": f["reason"]})
+
+    # required_any failures: only fail if ALL of the any-of skills are missing
+    required_any_failures = [f for f in skill_failures if f.get("type") == "required_any"]
+    required_any_skills = jd_requirements.get("required_skills_any_of", [])
+    if required_any_skills and len(required_any_failures) >= len(required_any_skills):
+        failures.append({
+            "check": "required_skill",
+            "reason": f"Missing all of required-any-of skills: {required_any_skills}",
+        })
 
     min_years = jd_requirements.get("min_years_experience")
     if min_years:

@@ -16,6 +16,28 @@ interface UploadScreenProps {
 
 // ─── Skill keyword extraction from JD text ──────────────────────────────────
 // Build a canonical list from SkillLogos keys, deduplicating aliases.
+// Also includes extra tech keywords that don't have logos but are real skills.
+
+const EXTRA_SKILLS = [
+  "Elixir", "Haskell", "Scala", "Clojure", "Erlang", "F#", "OCaml", "Zig",
+  "Lua", "Dart", "Julia", "MATLAB", "Solidity", "Groovy", "Objective-C",
+  "Snowflake", "dbt", "Airflow", "Spark", "Hadoop", "Flink", "Presto",
+  "Pulumi", "Ansible", "Chef", "Puppet", "Vagrant", "Packer",
+  "Prometheus", "Grafana", "Datadog", "Splunk", "ELK", "Logstash", "Kibana",
+  "Elasticsearch", "Cassandra", "DynamoDB", "CouchDB", "Neo4j", "InfluxDB",
+  "Supabase", "Prisma", "Drizzle", "Sequelize", "SQLAlchemy", "Mongoose",
+  "Remix", "Astro", "SolidJS", "Qwik", "Nuxt", "Gatsby",
+  "Cypress", "Playwright", "Selenium", "Jest", "Mocha", "Vitest", "pytest",
+  "Storybook", "Webpack", "Vite", "esbuild", "Rollup", "Turbopack",
+  "gRPC", "WebSocket", "OAuth", "JWT", "OpenAPI", "Swagger",
+  "Figma", "Vercel", "Netlify", "Heroku", "DigitalOcean", "Cloudflare",
+  "CircleCI", "TravisCI", "GitLab", "ArgoCD", "Helm",
+  "RxJS", "Redux", "MobX", "Zustand", "Jotai",
+  "Three.js", "D3.js", "Chart.js", "Mapbox",
+  "Unity", "Unreal", "Godot", "OpenCV", "scikit-learn", "Keras", "Hugging Face",
+  "LangChain", "OpenAI", "Pinecone", "Weaviate", "ChromaDB", "FAISS",
+  "Celery", "Sidekiq", "BullMQ",
+];
 
 const SKILL_CANONICAL: { name: string; pattern: RegExp }[] = (() => {
   // Keep only canonical names (skip alias-only entries like CSharp, CPP, etc.)
@@ -28,6 +50,9 @@ const SKILL_CANONICAL: { name: string; pattern: RegExp }[] = (() => {
 
   for (const key of Object.keys(SkillLogos)) {
     if (!skip.has(key)) canonical.add(key);
+  }
+  for (const name of EXTRA_SKILLS) {
+    canonical.add(name);
   }
 
   return Array.from(canonical).map((name) => {

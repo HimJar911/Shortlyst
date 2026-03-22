@@ -36,7 +36,7 @@ export default function ResultsScreen() {
   // Seed selectedId to the top-ranked candidate once data arrives.
   useEffect(() => {
     if (!stored || selectedId !== null) return;
-    const first = stored.ranked_candidates[0];
+    const first = stored.ranked_candidates?.[0];
     if (first) setSelectedId(first.candidate.resume_index);
   }, [stored]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +65,7 @@ export default function ResultsScreen() {
 
   const { candidates, eliminated, jd } = transformResults(stored);
 
-  const totalEliminated = stored.total_eliminated_phase1 + stored.total_eliminated_phase2;
+  const totalEliminated = (stored.total_eliminated_phase1 ?? 0) + (stored.total_eliminated_phase2 ?? 0);
   const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? candidates[0];
 
   const selectCandidate = (id: number) => {
