@@ -7,7 +7,7 @@ Only checks skills the JD actually asks for — resume skills are irrelevant her
 import asyncio
 from services.claude_client import call_llm_json
 from services.redis_queue import get_cached_github_data
-from services.github_client import get_readme
+from services.github_client import get_readme, get_repo_contents
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -177,6 +177,7 @@ async def run_code_analysis(
     required_skills: list[str],
     required_any_of: list[str] = None,
     preferred_skills: list[str] = None,
+    cached_github_data: dict = None,
 ) -> dict:
     """
     Verifies JD skills against source code + READMEs from all repos.
@@ -211,7 +212,8 @@ async def run_code_analysis(
             "summary": "No GitHub username",
         }
 
-    cached = await get_cached_github_data(username)
+    # Use pre-fetched data if available, otherwise fall back to Redis cache
+    cached = cached_github_data or await get_cached_github_data(username)
 
     # ── Source files from top repos ──────────────────────────────────────────
     all_source_files = {}
@@ -225,7 +227,9 @@ async def run_code_analysis(
             if repo.get("readme"):
                 cached_readmes[repo_name] = repo["readme"]
 
-    # ── READMEs from ALL repos ────────────────────────────────────────────────
+    # ── READMEs from remaining repos ─────────────────────────────────────────
+    # Fetch contents listing first, then use it to check README existence
+    # in a single call instead of the 4-call cascade (README.md → readme.md → ...)
     all_repos = cached.get("repos", []) if cached else []
     top_repo_names = set(cached_readmes.keys())
     remaining_repos = [
@@ -237,11 +241,29 @@ async def run_code_analysis(
     ]
 
     if remaining_repos:
-        readme_tasks = [get_readme(username, r["name"]) for r in remaining_repos[:10]]
-        readme_results = await asyncio.gather(*readme_tasks, return_exceptions=True)
-        for repo, readme in zip(remaining_repos[:10], readme_results):
-            if readme and not isinstance(readme, Exception):
-                cached_readmes[repo["name"]] = readme
+        repos_to_check = remaining_repos[:10]
+        # Fetch contents listings in parallel (1 call each)
+        contents_tasks = [
+            get_repo_contents(username, r["name"]) for r in repos_to_check
+        ]
+        contents_results = await asyncio.gather(*contents_tasks, return_exceptions=True)
+
+        # Now fetch READMEs using the contents listing to avoid cascade
+        readme_tasks = []
+        repos_with_tasks = []
+        for repo, contents in zip(repos_to_check, contents_results):
+            if isinstance(contents, Exception) or not contents:
+                continue
+            repos_with_tasks.append(repo)
+            readme_tasks.append(
+                get_readme(username, repo["name"], contents=contents)
+            )
+
+        if readme_tasks:
+            readme_results = await asyncio.gather(*readme_tasks, return_exceptions=True)
+            for repo, readme in zip(repos_with_tasks, readme_results):
+                if readme and not isinstance(readme, Exception):
+                    cached_readmes[repo["name"]] = readme
 
     readme_sections = []
     for repo_name, readme in cached_readmes.items():

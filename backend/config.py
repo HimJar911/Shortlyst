@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     PLAYWRIGHT_POOL_SIZE: int = 10
     MAX_CONCURRENT_URLS: int = 20
 
+    # LLM rate limiting
+    LLM_MAX_RETRIES: int = 4
+    LLM_RETRY_BASE_DELAY: float = 2.0  # seconds, doubles each retry
+    LLM_MAX_CONCURRENT: int = 3  # max parallel LLM calls to avoid TPM spikes
+
     # Timeouts (seconds)
     PHASE1_TIMEOUT_SECONDS: int = 10
     PHASE2_TIMEOUT_SECONDS: int = 120

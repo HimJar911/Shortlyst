@@ -54,12 +54,21 @@ async def run_phase2_for_candidate(
         # but code_analysis needs them separate for correct slot counting
         jd_required_only = jd_requirements.get("required_skills", [])
         jd_any_of = jd_requirements.get("required_skills_any_of", [])
+
+        # Pass cached github_data so code_analyzer doesn't re-fetch READMEs
+        from services.redis_queue import get_cached_github_data
+
+        cached_github_data = None
+        if github_username:
+            cached_github_data = await get_cached_github_data(github_username)
+
         code_analysis = await run_code_analysis(
             github_signal=github_signal,
             claimed_skills=claimed_skills,
             required_skills=jd_required_only,
             required_any_of=jd_any_of,
             preferred_skills=preferred_skills,
+            cached_github_data=cached_github_data,
         )
 
         verified = {
