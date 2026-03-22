@@ -3,15 +3,16 @@
 interface StatusBadgeProps {
   status: string;
   size?: "sm" | "xs";
+  dark?: boolean;
 }
 
-export default function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
+export default function StatusBadge({ status, size = "sm", dark = false }: StatusBadgeProps) {
   const styles: Record<string, { bg: string; color: string; label: string; border?: boolean }> = {
     confirmed: { bg: "rgba(10,10,10,0.85)", color: "#fff", label: "Confirmed" },
-    unverified: { bg: "rgba(0,0,0,0.06)", color: "var(--black)", label: "Unverified" },
-    flagged: { bg: "rgba(255,255,255,0.7)", color: "var(--black)", label: "Flagged", border: true },
+    unverified: { bg: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)", color: dark ? "#fff" : "var(--black)", label: "Unverified" },
+    flagged: { bg: dark ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.7)", color: dark ? "#fff" : "var(--black)", label: "Flagged", border: !dark },
     live: { bg: "rgba(10,10,10,0.85)", color: "#fff", label: "Live" },
-    dead: { bg: "rgba(0,0,0,0.06)", color: "var(--gray-600)", label: "Dead" },
+    dead: { bg: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)", color: dark ? "#fff" : "var(--gray-600)", label: "Dead" },
   };
   const s = styles[status] || styles.unverified;
   const fs = size === "xs" ? 9 : 11;

@@ -35,7 +35,7 @@ const TooltipCard = forwardRef<HTMLDivElement, { skill: Skill }>(function Toolti
       boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-        <StatusBadge status={skill.status} size="xs" />
+        <StatusBadge status={skill.status} size="xs" dark />
       </div>
       {skill.detail}
       <div style={{
