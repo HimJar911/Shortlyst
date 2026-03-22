@@ -248,14 +248,17 @@ export default function UploadScreen({ onStart, hasResults, onCheckResults }: Up
 
       {/* Header — logo only, no button */}
       <header style={{
-        padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "24px 40px", display: "flex", alignItems: "center",
         ...glass.header, position: "sticky", top: 0, zIndex: 10,
       }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
           <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)", letterSpacing: "-0.02em" }}>Shortlyst</span>
           <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--gray-400)", marginLeft: 8, textTransform: "uppercase", letterSpacing: "0.1em" }}>Recruitment Intelligence</span>
         </div>
-        {hasResults && onCheckResults && (
+      </header>
+
+      {hasResults && onCheckResults && (
+        <div style={{ padding: "14px 40px 0" }}>
           <button
             onClick={onCheckResults}
             onMouseEnter={() => setNavBtnHovered(true)}
@@ -282,10 +285,10 @@ export default function UploadScreen({ onStart, hasResults, onCheckResults }: Up
               transform: navBtnHovered && !navBtnPressed ? "translateY(-2px)" : "translateY(0px)",
             }}
           >
-            Check Results Again
+            Check Results
           </button>
-        )}
-      </header>
+        </div>
+      )}
 
       <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
         <div style={{ width: "100%", maxWidth: 820 }}>
