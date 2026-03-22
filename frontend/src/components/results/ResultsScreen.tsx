@@ -35,10 +35,12 @@ function SidebarRow({ children, as: Tag = "div", style, ...rest }: { children: R
   );
 }
 
-export default function ResultsScreen() {
+export default function ResultsScreen({ onGoToUpload }: { onGoToUpload: () => void }) {
   const [sidebarView, setSidebarView] = useState<"ranked" | "eliminated">("ranked");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [navBtnHovered, setNavBtnHovered] = useState(false);
+  const [navBtnPressed, setNavBtnPressed] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
 
   const jobId   = useJobStore((s) => s.jobId);
@@ -106,11 +108,41 @@ export default function ResultsScreen() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "var(--sans)" }}>
       <header style={{ padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, ...glass.header, zIndex: 10 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-          <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)" }}>Shortlyst</span>
-          <span style={{ fontSize: 12, color: "var(--gray-400)", fontWeight: 300 }}>
-            {jd.title}{jd.company ? ` · ${jd.company}` : ""}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <span style={{ fontFamily: "var(--serif)", fontSize: 22, color: "var(--black)" }}>Shortlyst</span>
+            <span style={{ fontSize: 12, color: "var(--gray-400)", fontWeight: 300 }}>
+              {jd.title}{jd.company ? ` · ${jd.company}` : ""}
+            </span>
+          </div>
+          <button
+            onClick={onGoToUpload}
+            onMouseEnter={() => setNavBtnHovered(true)}
+            onMouseLeave={() => { setNavBtnHovered(false); setNavBtnPressed(false); }}
+            onMouseDown={() => setNavBtnPressed(true)}
+            onMouseUp={() => setNavBtnPressed(false)}
+            style={{
+              padding: "10px 24px",
+              borderRadius: 9999,
+              fontFamily: "var(--sans)",
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+              border: "1px solid transparent",
+              cursor: "pointer",
+              transition: "background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease",
+              background: navBtnPressed ? "#0a0a0a" : navBtnHovered ? "#0a0a0a" : "#0a0a0a",
+              color: "#ffffff",
+              boxShadow: navBtnPressed
+                ? "0 2px 8px rgba(0,0,0,0.12)"
+                : navBtnHovered
+                  ? "0 4px 20px rgba(0,0,0,0.15)"
+                  : "0 2px 12px rgba(0,0,0,0.08)",
+              transform: navBtnHovered && !navBtnPressed ? "translateY(-2px)" : "translateY(0px)",
+            }}
+          >
+            Go to Upload
+          </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13, color: "var(--gray-500)", fontWeight: 300 }}>
           <span><strong style={{ color: "var(--black)", fontWeight: 500 }}>{stored.total_submitted}</strong> processed</span>
