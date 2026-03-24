@@ -27,7 +27,7 @@ Resumes lie. Candidates list skills they barely touched, link repos full of tuto
 | Phase | Method | Detail |
 |-------|--------|--------|
 | **Filter** | LLM parsing + deterministic checks | Hard-gate on skills, experience, education, GitHub presence. Eliminated candidates get specific reasons. |
-| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed holistically via LLM. Skills cross-referenced against actual source code and README evidence. URLs screenshotted with Playwright and analyzed by Vision AI. |
+| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed holistically via LLM. Skills cross-referenced against actual source code and repository evidence. URLs screenshotted with Playwright and analyzed by Vision AI. |
 | **Rank** | Single weighted LLM call | GitHub (50%) · Deployment (30%) · Skills match (20%) |
 
 All phases stream progress via SSE in real time.
@@ -94,8 +94,6 @@ cd frontend && npm run dev                      # Terminal 3
 ```
 
 → [localhost:3000](http://localhost:3000)
-
-> **Before each run:** `redis-cli FLUSHDB`
 
 ## Usage
 
