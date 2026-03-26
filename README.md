@@ -27,7 +27,7 @@ Resumes lie. Candidates list skills they barely touched, link repos full of tuto
 | Phase | Method | Detail |
 |-------|--------|--------|
 | **Filter** | LLM parsing + deterministic checks | Hard-gate on skills, experience, education, GitHub presence. Eliminated candidates get specific reasons. |
-| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed holistically via LLM. Skills cross-referenced against actual source code and README evidence. URLs screenshotted with Playwright and analyzed by Vision AI. |
+| **Verify** | GitHub audit + code analysis + deployment check | Repos assessed holistically via LLM. Skills cross-referenced against actual source code and repository evidence. URLs screenshotted with Playwright and analyzed by Vision AI. |
 | **Rank** | Single weighted LLM call | GitHub (50%) · Deployment (30%) · Skills match (20%) |
 
 All phases stream progress via SSE in real time.
@@ -95,8 +95,6 @@ cd frontend && npm run dev                      # Terminal 3
 
 → [localhost:3000](http://localhost:3000)
 
-> **Before each run:** `redis-cli FLUSHDB`
-
 ## Usage
 
 1. Paste or upload a job description.
@@ -137,10 +135,8 @@ Ranked + eliminated candidates with scores and reasoning. `202` if still process
 | Decision | Rationale |
 |----------|-----------|
 | Holistic GitHub assessment | Single LLM call per repo sees README + folder tree + languages + source files + commits. Problem difficulty as multiplier — advanced×good beats simple×excellent. |
-| README as skill evidence | If a candidate didn't document their tech stack, that's a signal. README mentions count as confirmed skills. |
 | JD-only skill verification | Skills section shows only what the JD asks for. Resume skills are noise to the recruiter. |
 | Deployment screenshot + Vision AI | Headless Chromium screenshots → Vision AI distinguishes real apps from templates and dead links. |
-| Soft commit signals | Commit frequency informs but never penalizes. Sparse history ≠ bad engineer. |
 | GitHub semaphore | Caps concurrent API requests at 10. Prevents secondary rate limit bursts across parallel candidates. |
 | Redis caching | GitHub data cached per username. Same candidate across runs = one API call. |
 
