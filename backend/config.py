@@ -7,7 +7,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
 
     # Anthropic
-    ANTHROPIC_API_KEY: str
+    ANTHROPIC_API_KEY: str = ""
 
     # GitHub
     GITHUB_TOKEN: str
